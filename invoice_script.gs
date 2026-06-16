@@ -32,19 +32,24 @@ function refreshInvoice() {
   const idxInvoiced = headers.indexOf('invoiced');
 
   const bookings = raw.slice(1)
-    .filter(r => r[0])
-    .map(r => ({
+    .map((r, i) => ({
       id:       r[idxId],
-      date:     r[idxDate],
+      date:     r[idxDate],   // may be a Date object or string
       batch:    r[idxBatch],
       boxType:  String(r[idxType]).toLowerCase(),
       status:   String(r[idxStat]).toLowerCase(),
       time:     r[idxTime] || '14:00',
       invoiced: r[idxInvoiced],
-      rowIndex: raw.indexOf(r),   // 0-based index into raw (includes header row)
+      sheetRow: i + 2,        // 1-based row in sheet (header = row 1)
     }))
+    .filter(r => r.id)
     .filter(b => b.status === 'confirmed' && !b.invoiced)
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    .sort((a, b) => {
+      // Sort by batch number ascending (e.g. Batch 24 → 25 → 26)
+      const numA = parseInt(String(a.batch).replace(/[^0-9]/g, '')) || 0;
+      const numB = parseInt(String(b.batch).replace(/[^0-9]/g, '')) || 0;
+      return numA - numB;
+    });
 
   // ── 2. Build values ───────────────────────────────────────────────────────
   const quantity = bookings.length;
@@ -55,7 +60,8 @@ function refreshInvoice() {
   }
 
   const pickupList = bookings.map((b, i) => {
-    const d       = new Date(b.date + 'T00:00:00');
+    // b.date may be a Date object from getValues(), use it directly
+    const d       = b.date instanceof Date ? b.date : new Date(String(b.date).slice(0, 10) + 'T00:00:00');
     const dateStr = d.toLocaleDateString('en-GB', {
       day:   'numeric',
       month: 'long',
@@ -77,9 +83,7 @@ function refreshInvoice() {
   // ── 4. Mark included bookings as invoiced in booking sheet ────────────────
   if (idxInvoiced >= 0) {
     bookings.forEach(b => {
-      // rowIndex is 0-based index in raw array (which includes header at 0)
-      // so rowIndex is already the sheet row - 1; sheet row = rowIndex + 1
-      bookingSheet.getRange(b.rowIndex + 1, idxInvoiced + 1).setValue(true);
+      bookingSheet.getRange(b.sheetRow, idxInvoiced + 1).setValue(true);
     });
   }
 
