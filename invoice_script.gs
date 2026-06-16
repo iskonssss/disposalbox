@@ -2,7 +2,7 @@
 const BOOKING_SS_ID = '1ZqZ_4pwdiGwltgQtnUBBYMngo1lS4h8AGshMyInMtoY';
 
 // Tab name in the INVOICE spreadsheet where the invoice lives
-const INVOICE_TAB = 'Sheet1'; // change if your invoice tab has a different name
+const INVOICE_TAB = '10xxB Invoice - Alex Sutrex Singapore';
 
 function onOpen() {
   SpreadsheetApp.getUi()
