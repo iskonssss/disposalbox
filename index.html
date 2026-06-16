@@ -353,6 +353,21 @@
     .s-chip.sel-confirmed { border-color: #16a34a; background: #dcfce7; color: #16a34a; }
     .s-chip.sel-pending   { border-color: #94a3b8; background: #f1f5f9; color: #64748b; }
 
+    /* Time slot chips — separate class so selStatus doesn't reset them */
+    .t-chip {
+      flex: 1;
+      padding: 13px 4px;
+      border: 2px solid var(--border);
+      border-radius: 9px;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      color: var(--muted);
+      background: white;
+    }
+    .t-chip.sel { border-color: #334155; background: #f1f5f9; color: #1e293b; }
+
     .save-btn {
       width: 100%;
       margin-top: 18px;
@@ -651,20 +666,27 @@
   function bgSync(qs) {
     setSyncState('syncing');
     fetch(`${API}?${qs}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.ok) {
-          setSyncState('ok');
-        } else {
+      .then(r => r.text())
+      .then(text => {
+        try {
+          const data = JSON.parse(text);
+          if (data && data.ok) {
+            setSyncState('ok');
+          } else {
+            setSyncState('error');
+            showToast('Sheet error: ' + (data.error || JSON.stringify(data)));
+            console.error('bgSync bad response:', data);
+          }
+        } catch {
           setSyncState('error');
-          showToast('Sheet sync error — redeploy Apps Script?');
-          console.error('Apps Script response:', data);
+          showToast('Sheet returned unexpected response — check console');
+          console.error('bgSync non-JSON:', text.slice(0, 300));
         }
       })
       .catch(err => {
         setSyncState('error');
-        showToast('Sync failed — check connection');
-        console.error('bgSync error:', err);
+        showToast('Sync failed: ' + err.message);
+        console.error('bgSync fetch error:', err);
       });
   }
 
@@ -935,7 +957,7 @@
           <div class="detail-dot" style="background:${color}"></div>
           <div class="detail-info">
             <div class="detail-batch">${b.batch||'—'}</div>
-            <div class="detail-meta">${typeLabel} · ${STATUS_LABEL[b.status]}</div>
+            <div class="detail-meta">${typeLabel} · ${displayTime(b.time)} · ${STATUS_LABEL[b.status]}</div>
           </div>
           <span class="edit-hint">Edit</span>
         </div>`;
@@ -966,8 +988,16 @@
         <input type="hidden" id="f-dates"  value="${dates.join(',')}" />
         <input type="hidden" id="f-type"   value="${type}" />
         <input type="hidden" id="f-status" value="confirmed" />
+        <input type="hidden" id="f-time"   value="14:00" />
         <div class="multi-dates">${dateLabels}</div>
         <div class="field" style="margin-top:16px">
+          <div class="field-label">Time Slot</div>
+          <div class="status-row">
+            <div class="t-chip" onclick="selTime(event,'09:00')">9am</div>
+            <div class="t-chip sel" onclick="selTime(event,'14:00')">2pm</div>
+          </div>
+        </div>
+        <div class="field">
           <div class="field-label">Starting Batch Number</div>
           <div class="batch-field">
             <span class="batch-prefix">${prefix}</span>
@@ -1004,10 +1034,11 @@
   }
 
   function saveMulti() {
-    const startN = parseInt(document.getElementById('f-start-num').value);
-    const type   = document.getElementById('f-type').value;
-    const status = document.getElementById('f-status').value;
-    const dates  = document.getElementById('f-dates').value.split(',');
+    const startN  = parseInt(document.getElementById('f-start-num').value);
+    const type    = document.getElementById('f-type').value;
+    const status  = document.getElementById('f-status').value;
+    const time    = document.getElementById('f-time').value || '14:00';
+    const dates   = document.getElementById('f-dates').value.split(',');
 
     if (!startN || isNaN(startN)) {
       document.getElementById('f-start-num').focus();
@@ -1018,7 +1049,7 @@
       id:      uid(),
       date,
       batch:   buildBatch(startN + i, type),
-      time:    '',
+      time,
       boxType: type,
       status,
     }));
@@ -1073,6 +1104,11 @@
     return type === 'standard' ? `Batch ${num}` : `Batch A${num}`;
   }
 
+  function displayTime(t) {
+    if (t === '09:00') return '9am';
+    return '2pm'; // default / '14:00'
+  }
+
   function nextBatchNum(type) {
     const nums = cache
       .filter(b => b.boxType === type && b.batch)
@@ -1083,6 +1119,7 @@
   function bookingForm(iso, type, prefill) {
     const color  = type === 'standard' ? 'std' : 'rei';
     const s      = (prefill && prefill.status) ? prefill.status : 'confirmed';
+    const tVal   = (prefill && prefill.time)   ? prefill.time   : '14:00';
     const prefix = type === 'standard' ? 'Batch ' : 'Batch A';
     const numVal = prefill ? parseBatchNum(prefill.batch, type) : nextBatchNum(type);
     return `
@@ -1090,6 +1127,7 @@
       <input type="hidden" id="f-date"   value="${iso}" />
       <input type="hidden" id="f-type"   value="${type}" />
       <input type="hidden" id="f-status" value="${s}" />
+      <input type="hidden" id="f-time"   value="${tVal}" />
       <div class="field">
         <div class="field-label">Batch Number</div>
         <div class="batch-field">
@@ -1097,6 +1135,13 @@
           <input type="number" inputmode="numeric" id="f-batch-num"
                  min="1" max="99999" placeholder="${type==='standard'?'24':'3'}"
                  value="${numVal}" />
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">Time Slot</div>
+        <div class="status-row">
+          <div class="t-chip${tVal==='09:00'?' sel':''}" onclick="selTime(event,'09:00')">9am</div>
+          <div class="t-chip${tVal!=='09:00'?' sel':''}" onclick="selTime(event,'14:00')">2pm</div>
         </div>
       </div>
       <div class="field">
@@ -1117,6 +1162,12 @@
     e.currentTarget.className = `s-chip sel-${s}`;
   }
 
+  function selTime(e, t) {
+    document.getElementById('f-time').value = t;
+    document.querySelectorAll('.t-chip').forEach(c => c.className = 't-chip');
+    e.currentTarget.className = 't-chip sel';
+  }
+
   // ── Save / Delete (optimistic — instant UI, background sync) ─────────────────
   function saveBooking() {
     const type    = document.getElementById('f-type').value;
@@ -1125,7 +1176,7 @@
       id:      editingId || uid(),
       date:    document.getElementById('f-date').value,
       batch:   buildBatch(num, type),
-      time:    '',
+      time:    document.getElementById('f-time').value || '14:00',
       boxType: type,
       status:  document.getElementById('f-status').value,
     };
@@ -1191,7 +1242,7 @@
       <div class="up-row">
         <div class="up-dot" style="background:${TYPE_COLOR[b.boxType]}"></div>
         <div class="up-date">${fmtShort(b.date)}</div>
-        <div class="up-batch">${b.batch||'—'}</div>
+        <div class="up-batch">${b.batch||'—'} · ${displayTime(b.time)}</div>
         <span class="up-badge badge-${b.status}">${STATUS_LABEL[b.status]}</span>
       </div>`).join('');
   }
