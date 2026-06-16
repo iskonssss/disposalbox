@@ -40,6 +40,19 @@
     header h1 { font-size: 17px; font-weight: 700; }
     header p  { font-size: 11px; color: #94a3b8; margin-top: 1px; }
 
+    .refresh-btn {
+      background: rgba(255,255,255,0.12);
+      border: none;
+      border-radius: 8px;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      color: white;
+      flex-shrink: 0;
+    }
+    .refresh-btn:active { background: rgba(255,255,255,0.22); }
+
     /* Sync indicator */
     .sync-dot {
       width: 8px; height: 8px;
@@ -596,7 +609,10 @@
     <h1>Sutrex Bookings</h1>
     <p>Medical Disposal Boxes</p>
   </div>
-  <div class="sync-dot syncing" id="syncDot" title="Syncing..."></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="refresh-btn" onclick="manualRefresh()" title="Refresh">↻</button>
+    <div class="sync-dot syncing" id="syncDot" title="Syncing..."></div>
+  </div>
 </header>
 
 <div class="type-tabs">
@@ -1310,6 +1326,13 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────────
+  async function manualRefresh() {
+    await fetchAll();
+    renderCal();
+    renderList();
+    showToast('Refreshed');
+  }
+
   async function init() {
     // Show local cache immediately (instant)
     cache = loadLocal();
