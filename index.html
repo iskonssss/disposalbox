@@ -417,6 +417,45 @@
     .add-for-btn.std-add { border-color: var(--std); color: var(--std); }
     .add-for-btn.rei-add { border-color: var(--rei); color: var(--rei); }
 
+    /* Drag-select highlight */
+    .cal-day.sel .day-num {
+      background: #334155;
+      color: white;
+      border-radius: 50%;
+      width: 26px; height: 26px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Multi-date form */
+    .multi-dates {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+      padding: 4px 0 0;
+      word-break: break-word;
+    }
+
+    .batch-preview {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      font-style: italic;
+      min-height: 18px;
+    }
+
+    .sel-count {
+      font-size: 12px;
+      font-weight: 700;
+      color: white;
+      background: #334155;
+      border-radius: 50px;
+      padding: 2px 10px;
+      position: absolute;
+      top: 8px; right: 10px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
     .toast {
       position: fixed;
       bottom: 24px;
@@ -458,12 +497,13 @@
   </div>
 </div>
 
-<div class="cal-wrap">
+<div class="cal-wrap" style="position:relative">
   <div class="cal-nav">
     <button onclick="prevMonth()">&#8249;</button>
     <span class="cal-month" id="calMonth"></span>
     <button onclick="nextMonth()">&#8250;</button>
   </div>
+  <span class="sel-count" id="selCount" style="display:none"></span>
   <div class="cal-grid" id="calGrid"></div>
 </div>
 
@@ -494,6 +534,9 @@
   let currentType = 'standard';
   let viewYear, viewMonth;
   let editingId   = null;
+  let selDates    = [];   // ISO strings of currently selected dates
+  let dragActive  = false;
+  let mouseDown   = false;
 
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -620,31 +663,118 @@
         reiBk ? `<div class="dot dot-rei-${reiBk.status}"></div>` : '',
       ].join('');
 
-      html += `<div class="cal-day${isToday?' today':''}${isPast?' past':''}" onclick="tapDay('${iso}')"><div class="day-num">${d}</div><div class="day-dots">${dots}</div></div>`;
+      const isSel = selDates.includes(iso);
+      html += `<div class="cal-day${isToday?' today':''}${isPast?' past':''}${isSel?' sel':''}" data-date="${iso}"><div class="day-num">${d}</div><div class="day-dots">${dots}</div></div>`;
     }
 
     document.getElementById('calGrid').innerHTML = html;
   }
 
-  // ── Tap a day ─────────────────────────────────────────────────────────────────
-  function tapDay(iso) {
-    const bks = cache.filter(b => b.date === iso);
+  // ── Drag-select ───────────────────────────────────────────────────────────────
+  function attachCalEvents() {
+    const grid = document.getElementById('calGrid');
 
-    if (bks.length === 0) {
-      openAddForm(iso, currentType);
+    grid.addEventListener('touchstart', e => {
+      const day = e.target.closest('[data-date]');
+      if (!day) return;
+      e.preventDefault();
+      dragActive = true;
+      selDates   = [];
+      addSel(day.dataset.date);
+    }, { passive: false });
+
+    grid.addEventListener('touchmove', e => {
+      if (!dragActive) return;
+      e.preventDefault();
+      const t   = e.touches[0];
+      const el  = document.elementFromPoint(t.clientX, t.clientY);
+      const day = el && el.closest('[data-date]');
+      if (day) addSel(day.dataset.date);
+    }, { passive: false });
+
+    grid.addEventListener('touchend', e => {
+      if (!dragActive) return;
+      e.preventDefault();
+      dragActive = false;
+      finishSel();
+    });
+
+    // Mouse support (desktop / testing)
+    grid.addEventListener('mousedown', e => {
+      const day = e.target.closest('[data-date]');
+      if (!day) return;
+      mouseDown = true;
+      selDates  = [];
+      addSel(day.dataset.date);
+    });
+    grid.addEventListener('mouseover', e => {
+      if (!mouseDown) return;
+      const day = e.target.closest('[data-date]');
+      if (day) addSel(day.dataset.date);
+    });
+    document.addEventListener('mouseup', () => {
+      if (!mouseDown) return;
+      mouseDown = false;
+      finishSel();
+    });
+  }
+
+  function addSel(iso) {
+    if (!selDates.includes(iso)) {
+      selDates.push(iso);
+      selDates.sort();
+    }
+    // Highlight in DOM without full re-render
+    document.querySelectorAll('[data-date]').forEach(el => {
+      el.classList.toggle('sel', selDates.includes(el.dataset.date));
+    });
+    const badge = document.getElementById('selCount');
+    if (selDates.length > 1) {
+      badge.textContent = selDates.length + ' dates';
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  function clearSel() {
+    selDates = [];
+    document.querySelectorAll('[data-date]').forEach(el => el.classList.remove('sel'));
+    document.getElementById('selCount').style.display = 'none';
+  }
+
+  function finishSel() {
+    if (selDates.length === 0) return;
+
+    if (selDates.length === 1) {
+      const iso = selDates[0];
+      clearSel();
+      // Single tap: show day detail or add form
+      const bks = cache.filter(b => b.date === iso);
+      if (bks.length === 0) {
+        openAddForm(iso, currentType);
+      } else {
+        openDayDetail(iso, bks);
+      }
       return;
     }
 
+    // Multi-date: open batch form
+    openMultiForm([...selDates]);
+    clearSel();
+  }
+
+  function openDayDetail(iso, bks) {
     const d = new Date(iso+'T00:00:00');
-    const dateLabel = d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'});
-    document.getElementById('sheetTitle').textContent = dateLabel;
+    document.getElementById('sheetTitle').textContent =
+      d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'});
 
     const hasStd = bks.some(b => b.boxType === 'standard');
     const hasRei = bks.some(b => b.boxType === 'reinforced');
 
     let html = '<div class="day-detail">';
     bks.forEach(b => {
-      const color = TYPE_COLOR[b.boxType];
+      const color     = TYPE_COLOR[b.boxType];
       const typeLabel = b.boxType === 'standard' ? 'Standard' : 'Reinforced';
       html += `
         <div class="detail-booking" onclick="openEditForm('${b.id}')">
@@ -664,6 +794,93 @@
 
     document.getElementById('sheetContent').innerHTML = html;
     document.getElementById('sheetOverlay').classList.add('open');
+  }
+
+  // ── Multi-date form ───────────────────────────────────────────────────────────
+  function openMultiForm(dates) {
+    const type   = currentType;
+    const color  = type === 'standard' ? 'std' : 'rei';
+    const prefix = type === 'standard' ? 'Batch ' : 'Batch A';
+
+    const dateLabels = dates.map(iso =>
+      new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})
+    ).join('  ·  ');
+
+    document.getElementById('sheetTitle').textContent = `${dates.length} dates`;
+    document.getElementById('sheetContent').innerHTML = `
+      <div class="sheet-body">
+        <input type="hidden" id="f-dates"  value="${dates.join(',')}" />
+        <input type="hidden" id="f-type"   value="${type}" />
+        <input type="hidden" id="f-status" value="confirmed" />
+        <div class="multi-dates">${dateLabels}</div>
+        <div class="field" style="margin-top:16px">
+          <div class="field-label">Starting Batch Number</div>
+          <div class="batch-field">
+            <span class="batch-prefix">${prefix}</span>
+            <input type="number" inputmode="numeric" id="f-start-num"
+                   min="1" max="99999" placeholder="${type==='standard'?'24':'1'}"
+                   oninput="updatePreview()" />
+          </div>
+          <div class="batch-preview" id="batchPreview"></div>
+        </div>
+        <div class="field">
+          <div class="field-label">Status</div>
+          <div class="status-row">
+            <div class="s-chip sel-confirmed" onclick="selStatus(event,'confirmed')">Confirmed</div>
+            <div class="s-chip"              onclick="selStatus(event,'pending')">Pending</div>
+          </div>
+        </div>
+        <button class="save-btn ${color}" id="saveBtn" onclick="saveMulti()">
+          Save ${dates.length} Bookings
+        </button>
+      </div>`;
+
+    document.getElementById('sheetOverlay').classList.add('open');
+    setTimeout(() => document.getElementById('f-start-num').focus(), 300);
+  }
+
+  function updatePreview() {
+    const num  = parseInt(document.getElementById('f-start-num').value);
+    const type = document.getElementById('f-type').value;
+    const dates = document.getElementById('f-dates').value.split(',');
+    const el   = document.getElementById('batchPreview');
+    if (!num || isNaN(num)) { el.textContent = ''; return; }
+    el.textContent = dates.map((_, i) => buildBatch(num + i, type)).join(' → ');
+  }
+
+  async function saveMulti() {
+    const btn    = document.getElementById('saveBtn');
+    const startN = parseInt(document.getElementById('f-start-num').value);
+    const type   = document.getElementById('f-type').value;
+    const status = document.getElementById('f-status').value;
+    const dates  = document.getElementById('f-dates').value.split(',');
+
+    if (!startN || isNaN(startN)) {
+      document.getElementById('f-start-num').focus();
+      return;
+    }
+
+    btn.disabled    = true;
+    btn.textContent = `Saving…`;
+
+    for (let i = 0; i < dates.length; i++) {
+      const booking = {
+        id:      uid(),
+        date:    dates[i],
+        batch:   buildBatch(startN + i, type),
+        time:    '',
+        boxType: type,
+        status,
+      };
+      const qs = `action=add&data=${encodeURIComponent(JSON.stringify(booking))}`;
+      await fetch(`${API}?${qs}`);
+    }
+
+    await fetchAll();
+    closeSheet();
+    renderCal();
+    renderList();
+    showToast(`${dates.length} bookings saved`);
   }
 
   // ── Forms ─────────────────────────────────────────────────────────────────────
@@ -778,6 +995,7 @@
   // ── Sheet ─────────────────────────────────────────────────────────────────────
   function closeSheet() {
     document.getElementById('sheetOverlay').classList.remove('open');
+    clearSel();
   }
 
   function handleOverlay(e) {
@@ -810,6 +1028,7 @@
   // ── Init ──────────────────────────────────────────────────────────────────────
   async function init() {
     initCal();
+    attachCalEvents();
     await fetchAll();
     renderCal();
     renderList();
