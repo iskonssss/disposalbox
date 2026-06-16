@@ -972,7 +972,8 @@
           <div class="batch-field">
             <span class="batch-prefix">${prefix}</span>
             <input type="number" inputmode="numeric" id="f-start-num"
-                   min="1" max="99999" placeholder="${type==='standard'?'24':'1'}"
+                   min="1" max="99999"
+                   value="${nextBatchNum(type)}"
                    oninput="updatePreview()" />
           </div>
           <div class="batch-preview" id="batchPreview"></div>
@@ -990,7 +991,7 @@
       </div>`;
 
     document.getElementById('sheetOverlay').classList.add('open');
-    setTimeout(() => document.getElementById('f-start-num').focus(), 300);
+    setTimeout(() => { updatePreview(); document.getElementById('f-start-num').focus(); }, 300);
   }
 
   function updatePreview() {
@@ -1072,11 +1073,18 @@
     return type === 'standard' ? `Batch ${num}` : `Batch A${num}`;
   }
 
+  function nextBatchNum(type) {
+    const nums = cache
+      .filter(b => b.boxType === type && b.batch)
+      .map(b => parseInt(parseBatchNum(String(b.batch), type)) || 0);
+    return nums.length ? Math.max(...nums) + 1 : 1;
+  }
+
   function bookingForm(iso, type, prefill) {
     const color  = type === 'standard' ? 'std' : 'rei';
     const s      = (prefill && prefill.status) ? prefill.status : 'confirmed';
     const prefix = type === 'standard' ? 'Batch ' : 'Batch A';
-    const numVal = prefill ? parseBatchNum(prefill.batch, type) : '';
+    const numVal = prefill ? parseBatchNum(prefill.batch, type) : nextBatchNum(type);
     return `
     <div class="sheet-body">
       <input type="hidden" id="f-date"   value="${iso}" />
