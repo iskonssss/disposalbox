@@ -14,7 +14,7 @@ function onOpen() {
 function refreshInvoice() {
   // ── 1. Read bookings ──────────────────────────────────────────────────────
   const bookingSS    = SpreadsheetApp.openById(BOOKING_SS_ID);
-  const bookingSheet = bookingSS.getSheetByName('Sheet1');
+  const bookingSheet = bookingSS.getSheetByName('Bookings');
   const raw          = bookingSheet.getDataRange().getValues();
 
   if (raw.length <= 1) {
@@ -22,25 +22,37 @@ function refreshInvoice() {
     return;
   }
 
-  const headers  = raw[0].map(h => String(h).toLowerCase().trim());
-  const idxDate  = headers.indexOf('date');
-  const idxBatch = headers.indexOf('batch');
-  const idxType  = headers.indexOf('boxtype');
-  const idxStat  = headers.indexOf('status');
+  const headers     = raw[0].map(h => String(h).toLowerCase().trim());
+  const idxId       = headers.indexOf('id');
+  const idxDate     = headers.indexOf('date');
+  const idxBatch    = headers.indexOf('batch');
+  const idxType     = headers.indexOf('boxtype');
+  const idxStat     = headers.indexOf('status');
+  const idxTime     = headers.indexOf('time');
+  const idxInvoiced = headers.indexOf('invoiced');
 
   const bookings = raw.slice(1)
-    .filter(r => r[0])                              // skip empty rows
+    .filter(r => r[0])
     .map(r => ({
-      date:    r[idxDate],
-      batch:   r[idxBatch],
-      boxType: String(r[idxType]).toLowerCase(),
-      status:  String(r[idxStat]).toLowerCase(),
+      id:       r[idxId],
+      date:     r[idxDate],
+      batch:    r[idxBatch],
+      boxType:  String(r[idxType]).toLowerCase(),
+      status:   String(r[idxStat]).toLowerCase(),
+      time:     r[idxTime] || '14:00',
+      invoiced: r[idxInvoiced],
+      rowIndex: raw.indexOf(r),   // 0-based index into raw (includes header row)
     }))
-    .filter(b => b.status === 'confirmed')          // confirmed only
+    .filter(b => b.status === 'confirmed' && !b.invoiced)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
   // ── 2. Build values ───────────────────────────────────────────────────────
   const quantity = bookings.length;
+
+  if (quantity === 0) {
+    SpreadsheetApp.getUi().alert('No new confirmed bookings to invoice (all already marked as invoiced).');
+    return;
+  }
 
   const pickupList = bookings.map((b, i) => {
     const d       = new Date(b.date + 'T00:00:00');
@@ -49,8 +61,9 @@ function refreshInvoice() {
       month: 'long',
       year:  'numeric',
     });
-    const suffix = b.boxType === 'reinforced' ? ' - REINFORCE' : '';
-    return `${i + 1}) ${dateStr} - ${b.batch} - 2pm${suffix}`;
+    const timeStr = (String(b.time) === '09:00') ? '9am' : '2pm';
+    const suffix  = b.boxType === 'reinforced' ? ' - REINFORCE' : '';
+    return `${i + 1}) ${dateStr} - ${b.batch} - ${timeStr}${suffix}`;
   }).join('\n');
 
   // ── 3. Write to invoice ───────────────────────────────────────────────────
@@ -58,10 +71,19 @@ function refreshInvoice() {
     .getActiveSpreadsheet()
     .getSheetByName(INVOICE_TAB);
 
-  invoiceSheet.getRange('H16').setValue(quantity); // quantity (top of merged cell)
+  invoiceSheet.getRange('H16').setValue(quantity);
   invoiceSheet.getRange('B18').setValue(pickupList);
 
+  // ── 4. Mark included bookings as invoiced in booking sheet ────────────────
+  if (idxInvoiced >= 0) {
+    bookings.forEach(b => {
+      // rowIndex is 0-based index in raw array (which includes header at 0)
+      // so rowIndex is already the sheet row - 1; sheet row = rowIndex + 1
+      bookingSheet.getRange(b.rowIndex + 1, idxInvoiced + 1).setValue(true);
+    });
+  }
+
   SpreadsheetApp.getUi().alert(
-    `Done! ${quantity} confirmed bookings written to the invoice.`
+    `Done! ${quantity} confirmed bookings written to the invoice and marked as invoiced.`
   );
 }

@@ -368,6 +368,38 @@
     }
     .t-chip.sel { border-color: #334155; background: #f1f5f9; color: #1e293b; }
 
+    /* Multiple dates button below calendar */
+    .multi-mode-wrap {
+      padding: 6px 6px 0;
+    }
+    .multi-mode-btn-outer {
+      width: 100%;
+      background: white;
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 11px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+    }
+
+    /* Invoice toggle chip */
+    .i-chip {
+      flex: 1;
+      padding: 13px 4px;
+      border: 2px solid var(--border);
+      border-radius: 9px;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      color: var(--muted);
+      background: white;
+    }
+    .i-chip.sel-inv { border-color: #16a34a; background: #dcfce7; color: #16a34a; }
+
     .save-btn {
       width: 100%;
       margin-top: 18px;
@@ -578,16 +610,19 @@
   <div class="cal-nav">
     <button onclick="prevMonth()">&#8249;</button>
     <span class="cal-month" id="calMonth"></span>
-    <button class="sel-mode-btn" id="selModeBtn" onclick="enterSelMode()">Select</button>
     <button onclick="nextMonth()">&#8250;</button>
   </div>
   <div class="cal-sel-bar" id="calSelBar">
-    <button class="sel-bar-cancel" onclick="exitSelMode()">Cancel</button>
+    <button class="sel-bar-cancel" onclick="exitSelMode()">Exit</button>
     <span class="sel-bar-label" id="selBarLabel">Tap dates to select</span>
     <button class="sel-bar-book" id="selBarBook" onclick="bookSelected()" disabled>Book</button>
   </div>
   <span class="sel-count" id="selCount" style="display:none"></span>
   <div class="cal-grid" id="calGrid"></div>
+</div>
+
+<div class="multi-mode-wrap" id="multiModeWrap">
+  <button class="multi-mode-btn-outer" onclick="enterSelMode()">Multiple Dates</button>
 </div>
 
 <div class="upcoming-wrap">
@@ -895,7 +930,7 @@
     multiSelMode = true;
     clearSel();
     document.getElementById('calSelBar').classList.add('show');
-    document.getElementById('selModeBtn').style.visibility = 'hidden';
+    document.getElementById('multiModeWrap').style.display = 'none';
     updateSelBar();
   }
 
@@ -903,7 +938,7 @@
     multiSelMode = false;
     clearSel();
     document.getElementById('calSelBar').classList.remove('show');
-    document.getElementById('selModeBtn').style.visibility = '';
+    document.getElementById('multiModeWrap').style.display = '';
   }
 
   function updateSelBar() {
@@ -952,12 +987,14 @@
     bks.forEach(b => {
       const color     = TYPE_COLOR[b.boxType];
       const typeLabel = b.boxType === 'standard' ? 'Standard' : 'Reinforced';
+      const isInv     = b.invoiced === true || String(b.invoiced).toLowerCase() === 'true';
+      const invTag    = isInv ? ' · <span style="color:#16a34a;font-weight:700">Invoiced</span>' : '';
       html += `
         <div class="detail-booking" onclick="openEditForm('${b.id}')">
           <div class="detail-dot" style="background:${color}"></div>
           <div class="detail-info">
             <div class="detail-batch">${b.batch||'—'}</div>
-            <div class="detail-meta">${typeLabel} · ${displayTime(b.time)} · ${STATUS_LABEL[b.status]}</div>
+            <div class="detail-meta">${typeLabel} · ${displayTime(b.time)} · ${STATUS_LABEL[b.status]}${invTag}</div>
           </div>
           <span class="edit-hint">Edit</span>
         </div>`;
@@ -1046,12 +1083,13 @@
     }
 
     const bookings = dates.map((date, i) => ({
-      id:      uid(),
+      id:       uid(),
       date,
-      batch:   buildBatch(startN + i, type),
+      batch:    buildBatch(startN + i, type),
       time,
-      boxType: type,
+      boxType:  type,
       status,
+      invoiced: false,
     }));
 
     // Update cache instantly
@@ -1122,12 +1160,14 @@
     const tVal   = (prefill && prefill.time)   ? prefill.time   : '14:00';
     const prefix = type === 'standard' ? 'Batch ' : 'Batch A';
     const numVal = prefill ? parseBatchNum(prefill.batch, type) : nextBatchNum(type);
+    const inv    = prefill && (prefill.invoiced === true || String(prefill.invoiced).toLowerCase() === 'true');
     return `
     <div class="sheet-body">
-      <input type="hidden" id="f-date"   value="${iso}" />
-      <input type="hidden" id="f-type"   value="${type}" />
-      <input type="hidden" id="f-status" value="${s}" />
-      <input type="hidden" id="f-time"   value="${tVal}" />
+      <input type="hidden" id="f-date"     value="${iso}" />
+      <input type="hidden" id="f-type"     value="${type}" />
+      <input type="hidden" id="f-status"   value="${s}" />
+      <input type="hidden" id="f-time"     value="${tVal}" />
+      <input type="hidden" id="f-invoiced" value="${inv}" />
       <div class="field">
         <div class="field-label">Batch Number</div>
         <div class="batch-field">
@@ -1151,6 +1191,13 @@
           <div class="s-chip${s==='pending'?' sel-pending':''}"   onclick="selStatus(event,'pending')">Pending</div>
         </div>
       </div>
+      ${prefill ? `
+      <div class="field">
+        <div class="field-label">Invoice</div>
+        <div class="status-row">
+          <div class="i-chip${inv?' sel-inv':''}" onclick="toggleInvoiced(event)">${inv ? '✓ Invoiced' : 'Not invoiced'}</div>
+        </div>
+      </div>` : ''}
       <button class="save-btn ${color}" id="saveBtn" onclick="saveBooking()">Save</button>
       ${prefill ? `<button class="delete-btn" onclick="deleteBooking('${prefill.id}')">Delete</button>` : ''}
     </div>`;
@@ -1160,6 +1207,14 @@
     document.getElementById('f-status').value = s;
     document.querySelectorAll('.s-chip').forEach(c => c.className = 's-chip');
     e.currentTarget.className = `s-chip sel-${s}`;
+  }
+
+  function toggleInvoiced(e) {
+    const inp    = document.getElementById('f-invoiced');
+    const newVal = inp.value !== 'true';
+    inp.value = newVal;
+    e.currentTarget.className   = 'i-chip' + (newVal ? ' sel-inv' : '');
+    e.currentTarget.textContent = newVal ? '✓ Invoiced' : 'Not invoiced';
   }
 
   function selTime(e, t) {
@@ -1172,13 +1227,15 @@
   function saveBooking() {
     const type    = document.getElementById('f-type').value;
     const num     = document.getElementById('f-batch-num').value.trim();
+    const invEl   = document.getElementById('f-invoiced');
     const booking = {
-      id:      editingId || uid(),
-      date:    document.getElementById('f-date').value,
-      batch:   buildBatch(num, type),
-      time:    document.getElementById('f-time').value || '14:00',
-      boxType: type,
-      status:  document.getElementById('f-status').value,
+      id:       editingId || uid(),
+      date:     document.getElementById('f-date').value,
+      batch:    buildBatch(num, type),
+      time:     document.getElementById('f-time').value || '14:00',
+      boxType:  type,
+      status:   document.getElementById('f-status').value,
+      invoiced: invEl ? invEl.value === 'true' : false,
     };
 
     // Update cache instantly
