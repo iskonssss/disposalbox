@@ -541,6 +541,15 @@
   const today = new Date();
   today.setHours(0,0,0,0);
 
+  // ── Local cache (instant load) ────────────────────────────────────────────────
+  function loadLocal() {
+    try { return JSON.parse(localStorage.getItem('sx-cache') || '[]'); }
+    catch { return []; }
+  }
+  function saveLocal(d) {
+    try { localStorage.setItem('sx-cache', JSON.stringify(d)); } catch {}
+  }
+
   // ── API ───────────────────────────────────────────────────────────────────────
   function setSyncState(state) {
     const dot = document.getElementById('syncDot');
@@ -561,25 +570,20 @@
       const res  = await fetch(`${API}?action=get`);
       const data = await res.json();
       cache = Array.isArray(data) ? data : [];
+      saveLocal(cache);
       setSyncState('ok');
     } catch (err) {
       setSyncState('error');
-      showToast('Could not load data');
+      showToast('Could not sync — showing cached data');
     }
     setLoading(false);
   }
 
-  async function apiCall(params) {
+  function bgSync(qs) {
     setSyncState('syncing');
-    try {
-      const qs  = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-      await fetch(`${API}?${qs}`);
-      await fetchAll();
-      setSyncState('ok');
-    } catch (err) {
-      setSyncState('error');
-      showToast('Sync failed — check connection');
-    }
+    fetch(`${API}?${qs}`)
+      .then(() => setSyncState('ok'))
+      .catch(() => { setSyncState('error'); showToast('Sync failed — will retry on reload'); });
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -848,8 +852,7 @@
     el.textContent = dates.map((_, i) => buildBatch(num + i, type)).join(' → ');
   }
 
-  async function saveMulti() {
-    const btn    = document.getElementById('saveBtn');
+  function saveMulti() {
     const startN = parseInt(document.getElementById('f-start-num').value);
     const type   = document.getElementById('f-type').value;
     const status = document.getElementById('f-status').value;
@@ -860,27 +863,26 @@
       return;
     }
 
-    btn.disabled    = true;
-    btn.textContent = `Saving…`;
+    const bookings = dates.map((date, i) => ({
+      id:      uid(),
+      date,
+      batch:   buildBatch(startN + i, type),
+      time:    '',
+      boxType: type,
+      status,
+    }));
 
-    for (let i = 0; i < dates.length; i++) {
-      const booking = {
-        id:      uid(),
-        date:    dates[i],
-        batch:   buildBatch(startN + i, type),
-        time:    '',
-        boxType: type,
-        status,
-      };
-      const qs = `action=add&data=${encodeURIComponent(JSON.stringify(booking))}`;
-      await fetch(`${API}?${qs}`);
-    }
+    // Update cache instantly
+    cache.push(...bookings);
+    saveLocal(cache);
 
-    await fetchAll();
     closeSheet();
     renderCal();
     renderList();
     showToast(`${dates.length} bookings saved`);
+
+    // Single batch API call in background
+    bgSync(`action=addMany&data=${encodeURIComponent(JSON.stringify(bookings))}`);
   }
 
   // ── Forms ─────────────────────────────────────────────────────────────────────
@@ -957,14 +959,10 @@
     e.currentTarget.className = `s-chip sel-${s}`;
   }
 
-  // ── Save / Delete ─────────────────────────────────────────────────────────────
-  async function saveBooking() {
-    const btn = document.getElementById('saveBtn');
-    btn.disabled = true;
-    btn.textContent = 'Saving…';
-
-    const type  = document.getElementById('f-type').value;
-    const num   = document.getElementById('f-batch-num').value.trim();
+  // ── Save / Delete (optimistic — instant UI, background sync) ─────────────────
+  function saveBooking() {
+    const type    = document.getElementById('f-type').value;
+    const num     = document.getElementById('f-batch-num').value.trim();
     const booking = {
       id:      editingId || uid(),
       date:    document.getElementById('f-date').value,
@@ -974,22 +972,37 @@
       status:  document.getElementById('f-status').value,
     };
 
-    const action = editingId ? 'update' : 'add';
-    await apiCall({ action, data: JSON.stringify(booking) });
+    // Update cache instantly
+    if (editingId) {
+      const idx = cache.findIndex(b => b.id === editingId);
+      if (idx !== -1) cache[idx] = booking;
+    } else {
+      cache.push(booking);
+    }
+    saveLocal(cache);
 
     closeSheet();
     renderCal();
     renderList();
-    showToast(editingId ? 'Booking updated' : 'Booking saved');
+    showToast(editingId ? 'Updated' : 'Saved');
+
+    // Sync to Google Sheets in background
+    const action = editingId ? 'update' : 'add';
+    bgSync(`action=${action}&data=${encodeURIComponent(JSON.stringify(booking))}`);
   }
 
-  async function deleteBooking(id) {
+  function deleteBooking(id) {
     if (!confirm('Delete this booking?')) return;
-    await apiCall({ action: 'delete', id });
+
+    cache = cache.filter(b => b.id !== id);
+    saveLocal(cache);
+
     closeSheet();
     renderCal();
     renderList();
-    showToast('Booking deleted');
+    showToast('Deleted');
+
+    bgSync(`action=delete&id=${encodeURIComponent(id)}`);
   }
 
   // ── Sheet ─────────────────────────────────────────────────────────────────────
@@ -1027,8 +1040,13 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────────
   async function init() {
+    // Show local cache immediately (instant)
+    cache = loadLocal();
     initCal();
     attachCalEvents();
+    renderCal();
+    renderList();
+    // Then sync fresh data from Google Sheets in background
     await fetchAll();
     renderCal();
     renderList();

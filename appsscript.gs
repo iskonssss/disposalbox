@@ -30,6 +30,12 @@ function doGet(e) {
     return json({ ok: true });
   }
 
+  if (action === 'addMany') {
+    const bookings = JSON.parse(e.parameter.data);
+    bookings.forEach(b => ss.appendRow([b.id, b.date, b.batch, b.time, b.boxType, b.status]));
+    return json({ ok: true });
+  }
+
   if (action === 'update') {
     const b    = JSON.parse(e.parameter.data);
     const rows = ss.getDataRange().getValues();
