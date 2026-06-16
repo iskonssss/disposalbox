@@ -17,7 +17,14 @@ function doGet(e) {
         const obj = {};
         headers.forEach((h, i) => {
           const key = KEY_MAP[String(h).toLowerCase()] || String(h).toLowerCase();
-          obj[key] = r[i];
+          let val = r[i];
+          if (key === 'date' && val instanceof Date) {
+            const y  = val.getFullYear();
+            const mo = String(val.getMonth() + 1).padStart(2, '0');
+            const d  = String(val.getDate()).padStart(2, '0');
+            val = `${y}-${mo}-${d}`;
+          }
+          obj[key] = val;
         });
         return obj;
       });

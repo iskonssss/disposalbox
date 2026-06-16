@@ -162,6 +162,7 @@
     .cal-day.past   { opacity: 0.4; }
 
     .cal-day.today .day-num {
+      background: white;
       border: 2px solid #1e293b;
       border-radius: 50%;
       width: 26px; height: 26px;
@@ -689,7 +690,10 @@
     try {
       const res  = await fetch(`${API}?action=get`);
       const data = await res.json();
-      cache = Array.isArray(data) ? data : [];
+      cache = Array.isArray(data) ? data.map(b => ({
+        ...b,
+        date: String(b.date || '').slice(0, 10), // normalize Google Sheets Date timestamps to YYYY-MM-DD
+      })) : [];
       saveLocal(cache);
       setSyncState('ok');
     } catch (err) {
