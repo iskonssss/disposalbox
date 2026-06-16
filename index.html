@@ -101,8 +101,8 @@
     /* Calendar */
     .cal-wrap {
       background: var(--card);
-      margin: 10px 10px 0;
-      border-radius: 16px;
+      margin: 8px 6px 0;
+      border-radius: 14px;
       overflow: hidden;
       box-shadow: 0 1px 4px rgba(0,0,0,0.07);
     }
@@ -149,11 +149,12 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      border-radius: 10px;
-      margin: 2px;
+      border-radius: 8px;
+      margin: 1px;
       position: relative;
       user-select: none;
       transition: background 0.1s;
+      min-width: 0;
     }
 
     .cal-day:active { background: var(--bg); }
@@ -299,29 +300,49 @@
 
     .field { margin-bottom: 16px; }
 
-    input[type="text"], input[type="time"], select {
-      width: 100%;
+    /* Batch number input with prefix */
+    .batch-field {
+      display: flex;
+      align-items: center;
       border: 1.5px solid var(--border);
       border-radius: 10px;
-      padding: 11px 13px;
-      font-size: 15px;
+      overflow: hidden;
+      background: white;
+      transition: border-color 0.15s;
+    }
+    .batch-field:focus-within { border-color: var(--std); }
+    .batch-prefix {
+      padding: 12px 6px 12px 14px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--muted);
+      white-space: nowrap;
+      user-select: none;
+    }
+    .batch-field input[type="number"] {
+      border: none;
+      flex: 1;
+      padding: 12px 14px 12px 2px;
+      font-size: 20px;
+      font-weight: 700;
       font-family: inherit;
       color: var(--text);
       background: white;
       -webkit-appearance: none;
       outline: none;
+      min-width: 0;
     }
+    .batch-field input[type="number"]::-webkit-inner-spin-button,
+    .batch-field input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
 
-    input:focus, select:focus { border-color: var(--std); }
-
-    .status-row { display: flex; gap: 6px; }
+    .status-row { display: flex; gap: 8px; }
 
     .s-chip {
       flex: 1;
-      padding: 9px 4px;
+      padding: 13px 4px;
       border: 2px solid var(--border);
       border-radius: 9px;
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 700;
       text-align: center;
       cursor: pointer;
@@ -329,9 +350,8 @@
       background: white;
     }
 
-    .s-chip.sel-confirmed  { border-color: #16a34a; background: #dcfce7; color: #16a34a; }
-    .s-chip.sel-softbooked { border-color: #d97706; background: #fef3c7; color: #d97706; }
-    .s-chip.sel-pending    { border-color: #94a3b8; background: #f1f5f9; color: #64748b; }
+    .s-chip.sel-confirmed { border-color: #16a34a; background: #dcfce7; color: #16a34a; }
+    .s-chip.sel-pending   { border-color: #94a3b8; background: #f1f5f9; color: #64748b; }
 
     .save-btn {
       width: 100%;
@@ -444,16 +464,7 @@
     <span class="cal-month" id="calMonth"></span>
     <button onclick="nextMonth()">&#8250;</button>
   </div>
-  <div class="cal-grid">
-    <div class="cal-dow">Su</div>
-    <div class="cal-dow">Mo</div>
-    <div class="cal-dow">Tu</div>
-    <div class="cal-dow">We</div>
-    <div class="cal-dow">Th</div>
-    <div class="cal-dow">Fr</div>
-    <div class="cal-dow">Sa</div>
-    <div id="calDays" style="display:contents"></div>
-  </div>
+  <div class="cal-grid" id="calGrid"></div>
 </div>
 
 <div class="upcoming-wrap">
@@ -550,7 +561,7 @@
     return `${h>12?h-12:h}${m?':'+String(m).padStart(2,'0'):''}${h>=12?'pm':'am'}`;
   }
 
-  const STATUS_LABEL = { confirmed:'CONFIRMED', softbooked:'SOFT BOOKED', pending:'PENDING' };
+  const STATUS_LABEL = { confirmed:'CONFIRMED', softbooked:'SOFT BOOKED', pending:'PENDING' }; // softbooked kept for legacy data
   const TYPE_COLOR   = { standard:'var(--std)', reinforced:'var(--rei)' };
 
   function showToast(msg) {
@@ -589,31 +600,30 @@
     const byDate = {};
     cache.forEach(b => { (byDate[b.date] = byDate[b.date]||[]).push(b); });
 
-    let html = '';
+    // DOW headers rendered here to avoid display:contents iOS issues
+    let html = ['Su','Mo','Tu','We','Th','Fr','Sa']
+      .map(d => `<div class="cal-dow">${d}</div>`).join('');
+
     for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
 
     for (let d = 1; d <= daysInMonth; d++) {
-      const iso    = isoDate(viewYear, viewMonth, d);
-      const bks    = byDate[iso] || [];
+      const iso     = isoDate(viewYear, viewMonth, d);
+      const bks     = byDate[iso] || [];
       const isToday = iso === todayIso;
       const isPast  = iso < todayIso;
 
-      const stdBk  = bks.find(b => b.boxType === 'standard');
-      const reiBk  = bks.find(b => b.boxType === 'reinforced');
+      const stdBk = bks.find(b => b.boxType === 'standard');
+      const reiBk = bks.find(b => b.boxType === 'reinforced');
 
       const dots = [
         stdBk ? `<div class="dot dot-std-${stdBk.status}"></div>` : '',
         reiBk ? `<div class="dot dot-rei-${reiBk.status}"></div>` : '',
       ].join('');
 
-      html += `
-        <div class="cal-day${isToday?' today':''}${isPast?' past':''}" onclick="tapDay('${iso}')">
-          <div class="day-num">${d}</div>
-          <div class="day-dots">${dots}</div>
-        </div>`;
+      html += `<div class="cal-day${isToday?' today':''}${isPast?' past':''}" onclick="tapDay('${iso}')"><div class="day-num">${d}</div><div class="day-dots">${dots}</div></div>`;
     }
 
-    document.getElementById('calDays').innerHTML = html;
+    document.getElementById('calGrid').innerHTML = html;
   }
 
   // ── Tap a day ─────────────────────────────────────────────────────────────────
@@ -641,7 +651,7 @@
           <div class="detail-dot" style="background:${color}"></div>
           <div class="detail-info">
             <div class="detail-batch">${b.batch||'—'}</div>
-            <div class="detail-meta">${typeLabel} · ${fmtTime(b.time)} · ${STATUS_LABEL[b.status]}</div>
+            <div class="detail-meta">${typeLabel} · ${STATUS_LABEL[b.status]}</div>
           </div>
           <span style="font-size:13px;color:var(--muted)">›</span>
         </div>`;
@@ -677,28 +687,46 @@
     document.getElementById('sheetOverlay').classList.add('open');
   }
 
+  function parseBatchNum(batch, type) {
+    if (!batch) return '';
+    if (type === 'standard') {
+      const m = String(batch).match(/(\d+)/);
+      return m ? m[1] : '';
+    } else {
+      const m = String(batch).match(/A(\d+)/i);
+      return m ? m[1] : String(batch).replace(/[^0-9]/g, '');
+    }
+  }
+
+  function buildBatch(num, type) {
+    if (!num) return '';
+    return type === 'standard' ? `Batch ${num}` : `Batch A${num}`;
+  }
+
   function bookingForm(iso, type, prefill) {
-    const color = type === 'standard' ? 'std' : 'rei';
-    const s = prefill ? prefill.status : 'confirmed';
+    const color  = type === 'standard' ? 'std' : 'rei';
+    const s      = (prefill && prefill.status) ? prefill.status : 'confirmed';
+    const prefix = type === 'standard' ? 'Batch ' : 'Batch A';
+    const numVal = prefill ? parseBatchNum(prefill.batch, type) : '';
     return `
     <div class="sheet-body">
-      <input type="hidden" id="f-date" value="${iso}" />
-      <input type="hidden" id="f-type" value="${type}" />
+      <input type="hidden" id="f-date"   value="${iso}" />
+      <input type="hidden" id="f-type"   value="${type}" />
       <input type="hidden" id="f-status" value="${s}" />
       <div class="field">
-        <div class="field-label">Batch Name</div>
-        <input type="text" id="f-batch" placeholder="e.g. Batch 24 or Batch A3" value="${prefill?prefill.batch:''}" />
-      </div>
-      <div class="field">
-        <div class="field-label">Time</div>
-        <input type="time" id="f-time" value="${prefill?prefill.time:'14:00'}" />
+        <div class="field-label">Batch Number</div>
+        <div class="batch-field">
+          <span class="batch-prefix">${prefix}</span>
+          <input type="number" inputmode="numeric" id="f-batch-num"
+                 min="1" max="99999" placeholder="${type==='standard'?'24':'3'}"
+                 value="${numVal}" />
+        </div>
       </div>
       <div class="field">
         <div class="field-label">Status</div>
         <div class="status-row">
           <div class="s-chip${s==='confirmed'?' sel-confirmed':''}" onclick="selStatus(event,'confirmed')">Confirmed</div>
-          <div class="s-chip${s==='softbooked'?' sel-softbooked':''}" onclick="selStatus(event,'softbooked')">Soft Book</div>
-          <div class="s-chip${s==='pending'?' sel-pending':''}" onclick="selStatus(event,'pending')">Pending</div>
+          <div class="s-chip${s==='pending'?' sel-pending':''}"   onclick="selStatus(event,'pending')">Pending</div>
         </div>
       </div>
       <button class="save-btn ${color}" id="saveBtn" onclick="saveBooking()">Save</button>
@@ -718,12 +746,14 @@
     btn.disabled = true;
     btn.textContent = 'Saving…';
 
+    const type  = document.getElementById('f-type').value;
+    const num   = document.getElementById('f-batch-num').value.trim();
     const booking = {
       id:      editingId || uid(),
       date:    document.getElementById('f-date').value,
-      batch:   document.getElementById('f-batch').value.trim(),
-      time:    document.getElementById('f-time').value,
-      boxType: document.getElementById('f-type').value,
+      batch:   buildBatch(num, type),
+      time:    '',
+      boxType: type,
       status:  document.getElementById('f-status').value,
     };
 
