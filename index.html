@@ -819,13 +819,15 @@
     document.getElementById('calGrid').innerHTML = html;
   }
 
-  // ── Calendar tap events ───────────────────────────────────────────────────────
+  // ── Calendar tap + swipe events ──────────────────────────────────────────────
   function attachCalEvents() {
     const grid = document.getElementById('calGrid');
     let touchStartDate = null;
+    let startX = 0, startY = 0, currX = 0, currY = 0;
 
-    // Touch: tap only
     grid.addEventListener('touchstart', e => {
+      startX = currX = e.touches[0].clientX;
+      startY = currY = e.touches[0].clientY;
       const day = e.target.closest('[data-date]');
       if (!day) return;
       e.preventDefault();
@@ -833,16 +835,30 @@
     }, { passive: false });
 
     grid.addEventListener('touchmove', e => {
-      if (touchStartDate) e.preventDefault(); // prevent page scroll while touching a day
+      currX = e.touches[0].clientX;
+      currY = e.touches[0].clientY;
+      if (touchStartDate) e.preventDefault();
     }, { passive: false });
 
     grid.addEventListener('touchend', e => {
+      const dx = currX - startX;
+      const dy = currY - startY;
+
+      // Horizontal swipe: > 60px and more horizontal than vertical
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+        touchStartDate = null;
+        dx < 0 ? nextMonth() : prevMonth();
+        return;
+      }
+
       if (!touchStartDate) return;
       e.preventDefault();
       const date = touchStartDate;
       touchStartDate = null;
       handleDayTap(date);
     });
+
+    grid.addEventListener('touchcancel', () => { touchStartDate = null; });
 
     // Mouse (desktop / testing)
     grid.addEventListener('click', e => {
