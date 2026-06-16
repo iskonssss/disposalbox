@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Sutrex Bookings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --std:   #2563eb;
+      --std-bg: #dbeafe;
+      --rei:   #b45309;
+      --rei-bg: #fef3c7;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --muted: #94a3b8;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      max-width: 430px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: #1e293b;
+      color: white;
+      padding: 14px 18px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 { font-size: 17px; font-weight: 700; }
+    header p  { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+
+    /* Sync indicator */
+    .sync-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      flex-shrink: 0;
+    }
+    .sync-dot.syncing { background: #fbbf24; animation: pulse 1s infinite; }
+    .sync-dot.error   { background: #f87171; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .type-tabs {
+      display: flex;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      gap: 8px;
+    }
+
+    .type-tab {
+      flex: 1;
+      padding: 10px 8px;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      background: white;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--muted);
+      text-align: center;
+      transition: all 0.15s;
+    }
+
+    .type-tab.active-std { border-color: var(--std); background: var(--std-bg); color: var(--std); }
+    .type-tab.active-rei { border-color: var(--rei); background: var(--rei-bg); color: var(--rei); }
+
+    .tab-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* Loading overlay */
+    .loading-bar {
+      height: 3px;
+      background: var(--std);
+      width: 0%;
+      transition: width 0.4s ease;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 999;
+    }
+    .loading-bar.active { width: 70%; }
+    .loading-bar.done   { width: 100%; opacity: 0; transition: width 0.2s, opacity 0.3s 0.2s; }
+
+    /* Calendar */
+    .cal-wrap {
+      background: var(--card);
+      margin: 10px 10px 0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+
+    .cal-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px 10px;
+    }
+
+    .cal-nav button {
+      background: var(--bg);
+      border: none;
+      border-radius: 8px;
+      width: 34px; height: 34px;
+      font-size: 18px;
+      cursor: pointer;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cal-month { font-size: 16px; font-weight: 700; }
+
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+    }
+
+    .cal-dow {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      padding: 4px 0 8px;
+    }
+
+    .cal-day {
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 10px;
+      margin: 2px;
+      position: relative;
+      user-select: none;
+      transition: background 0.1s;
+    }
+
+    .cal-day:active { background: var(--bg); }
+    .cal-day.empty  { cursor: default; }
+    .cal-day.past   { opacity: 0.4; }
+
+    .cal-day.today .day-num {
+      background: #1e293b;
+      color: white;
+      border-radius: 50%;
+      width: 26px; height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .day-num {
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1;
+      width: 26px; height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .day-dots {
+      display: flex;
+      gap: 2px;
+      margin-top: 3px;
+      height: 7px;
+      align-items: center;
+    }
+
+    .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dot-std-confirmed  { background: var(--std); }
+    .dot-std-softbooked { background: var(--std); opacity: 0.5; }
+    .dot-std-pending    { background: transparent; border: 1.5px solid var(--std); width: 5px; height: 5px; }
+    .dot-rei-confirmed  { background: var(--rei); }
+    .dot-rei-softbooked { background: var(--rei); opacity: 0.5; }
+    .dot-rei-pending    { background: transparent; border: 1.5px solid var(--rei); width: 5px; height: 5px; }
+
+    /* Upcoming list */
+    .upcoming-wrap { margin: 10px 10px 20px; }
+
+    .upcoming-header {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 10px 4px 6px;
+    }
+
+    .up-list {
+      background: var(--card);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .up-row {
+      display: flex;
+      align-items: center;
+      padding: 9px 14px;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .up-row:last-child { border-bottom: none; }
+
+    .up-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .up-date { font-size: 12px; font-weight: 700; min-width: 56px; color: var(--text); }
+    .up-batch { font-size: 12px; color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .up-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 50px; }
+
+    .badge-confirmed  { background: #dcfce7; color: #16a34a; }
+    .badge-softbooked { background: #fef3c7; color: #d97706; }
+    .badge-pending    { background: #f1f5f9; color: #64748b; }
+
+    .up-empty { padding: 16px 14px; font-size: 12px; color: var(--muted); text-align: center; }
+
+    /* Sheet */
+    .sheet-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 400;
+      align-items: flex-end;
+    }
+    .sheet-overlay.open { display: flex; }
+
+    .sheet {
+      background: white;
+      border-radius: 20px 20px 0 0;
+      padding: 0 0 40px;
+      width: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      animation: up 0.22s ease;
+    }
+
+    @keyframes up { from{transform:translateY(100%)} to{transform:translateY(0)} }
+
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: #e2e8f0;
+      border-radius: 2px;
+      margin: 12px auto 0;
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sheet-title { font-size: 16px; font-weight: 700; }
+
+    .sheet-close {
+      background: var(--bg);
+      border: none;
+      border-radius: 50%;
+      width: 30px; height: 30px;
+      font-size: 16px;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .sheet-body { padding: 18px 18px 0; }
+
+    .field-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .field { margin-bottom: 16px; }
+
+    input[type="text"], input[type="time"], select {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 13px;
+      font-size: 15px;
+      font-family: inherit;
+      color: var(--text);
+      background: white;
+      -webkit-appearance: none;
+      outline: none;
+    }
+
+    input:focus, select:focus { border-color: var(--std); }
+
+    .status-row { display: flex; gap: 6px; }
+
+    .s-chip {
+      flex: 1;
+      padding: 9px 4px;
+      border: 2px solid var(--border);
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      color: var(--muted);
+      background: white;
+    }
+
+    .s-chip.sel-confirmed  { border-color: #16a34a; background: #dcfce7; color: #16a34a; }
+    .s-chip.sel-softbooked { border-color: #d97706; background: #fef3c7; color: #d97706; }
+    .s-chip.sel-pending    { border-color: #94a3b8; background: #f1f5f9; color: #64748b; }
+
+    .save-btn {
+      width: 100%;
+      margin-top: 18px;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      color: white;
+      cursor: pointer;
+    }
+
+    .save-btn:disabled { opacity: 0.55; }
+    .save-btn.std { background: var(--std); }
+    .save-btn.rei { background: var(--rei); }
+
+    .delete-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 12px;
+      border: 1.5px solid #fee2e2;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #ef4444;
+      background: white;
+      cursor: pointer;
+    }
+
+    .day-detail { padding: 0 18px; }
+
+    .detail-booking {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .detail-booking:last-child { border-bottom: none; }
+
+    .detail-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .detail-info { flex: 1; }
+    .detail-batch { font-size: 14px; font-weight: 700; }
+    .detail-meta  { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+    .add-for { display: flex; gap: 8px; padding: 14px 0 0; }
+
+    .add-for-btn {
+      flex: 1;
+      padding: 10px 6px;
+      border-radius: 10px;
+      border: 2px dashed var(--border);
+      background: white;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .add-for-btn.std-add { border-color: var(--std); color: var(--std); }
+    .add-for-btn.rei-add { border-color: var(--rei); color: var(--rei); }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: white;
+      padding: 10px 18px;
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 999;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div class="loading-bar" id="loadingBar"></div>
+
+<header>
+  <div>
+    <h1>Sutrex Bookings</h1>
+    <p>Medical Disposal Boxes</p>
+  </div>
+  <div class="sync-dot syncing" id="syncDot" title="Syncing..."></div>
+</header>
+
+<div class="type-tabs">
+  <div class="type-tab active-std" id="tab-std" onclick="setType('standard')">
+    <span class="tab-dot" style="background:var(--std)"></span>Standard
+  </div>
+  <div class="type-tab" id="tab-rei" onclick="setType('reinforced')">
+    <span class="tab-dot" style="background:var(--rei)"></span>Reinforced
+  </div>
+</div>
+
+<div class="cal-wrap">
+  <div class="cal-nav">
+    <button onclick="prevMonth()">&#8249;</button>
+    <span class="cal-month" id="calMonth"></span>
+    <button onclick="nextMonth()">&#8250;</button>
+  </div>
+  <div class="cal-grid">
+    <div class="cal-dow">Su</div>
+    <div class="cal-dow">Mo</div>
+    <div class="cal-dow">Tu</div>
+    <div class="cal-dow">We</div>
+    <div class="cal-dow">Th</div>
+    <div class="cal-dow">Fr</div>
+    <div class="cal-dow">Sa</div>
+    <div id="calDays" style="display:contents"></div>
+  </div>
+</div>
+
+<div class="upcoming-wrap">
+  <div class="upcoming-header">Upcoming</div>
+  <div class="up-list" id="upList"><div class="up-empty">Loading...</div></div>
+</div>
+
+<div class="sheet-overlay" id="sheetOverlay" onclick="handleOverlay(event)">
+  <div class="sheet" id="sheetEl">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <span class="sheet-title" id="sheetTitle"></span>
+      <button class="sheet-close" onclick="closeSheet()">&#x2715;</button>
+    </div>
+    <div id="sheetContent"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Config ───────────────────────────────────────────────────────────────────
+  const API = 'https://script.google.com/macros/s/AKfycbw6q7oo2tx_Jfy0sk8b-fWr2Ip4dcnHzdTJOdQF9EfmhDZq50WrVGChOH4OFk5wZCaS/exec';
+
+  // ── State ────────────────────────────────────────────────────────────────────
+  let cache       = [];
+  let currentType = 'standard';
+  let viewYear, viewMonth;
+  let editingId   = null;
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // ── API ───────────────────────────────────────────────────────────────────────
+  function setSyncState(state) {
+    const dot = document.getElementById('syncDot');
+    dot.className = 'sync-dot' + (state === 'syncing' ? ' syncing' : state === 'error' ? ' error' : '');
+    dot.title = state === 'syncing' ? 'Syncing…' : state === 'error' ? 'Sync error' : 'Synced';
+  }
+
+  function setLoading(on) {
+    const bar = document.getElementById('loadingBar');
+    if (on) { bar.className = 'loading-bar active'; }
+    else     { bar.className = 'loading-bar done'; setTimeout(() => bar.className = 'loading-bar', 500); }
+  }
+
+  async function fetchAll() {
+    setSyncState('syncing');
+    setLoading(true);
+    try {
+      const res  = await fetch(`${API}?action=get`);
+      const data = await res.json();
+      cache = Array.isArray(data) ? data : [];
+      setSyncState('ok');
+    } catch (err) {
+      setSyncState('error');
+      showToast('Could not load data');
+    }
+    setLoading(false);
+  }
+
+  async function apiCall(params) {
+    setSyncState('syncing');
+    try {
+      const qs  = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+      await fetch(`${API}?${qs}`);
+      await fetchAll();
+      setSyncState('ok');
+    } catch (err) {
+      setSyncState('error');
+      showToast('Sync failed — check connection');
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+  function todayISO() {
+    const d = today;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function isoDate(y,m,d) {
+    return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+
+  function fmtShort(iso) {
+    return new Date(iso+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  }
+
+  function fmtTime(t) {
+    if (!t) return '';
+    const [h,m] = t.split(':').map(Number);
+    return `${h>12?h-12:h}${m?':'+String(m).padStart(2,'0'):''}${h>=12?'pm':'am'}`;
+  }
+
+  const STATUS_LABEL = { confirmed:'CONFIRMED', softbooked:'SOFT BOOKED', pending:'PENDING' };
+  const TYPE_COLOR   = { standard:'var(--std)', reinforced:'var(--rei)' };
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // ── Box type selector ─────────────────────────────────────────────────────────
+  function setType(t) {
+    currentType = t;
+    document.getElementById('tab-std').className = 'type-tab' + (t==='standard' ? ' active-std' : '');
+    document.getElementById('tab-rei').className = 'type-tab' + (t==='reinforced' ? ' active-rei' : '');
+  }
+
+  // ── Calendar ──────────────────────────────────────────────────────────────────
+  function initCal() {
+    viewYear  = today.getFullYear();
+    viewMonth = today.getMonth();
+    renderCal();
+  }
+
+  function prevMonth() { viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderCal(); }
+  function nextMonth() { viewMonth++; if(viewMonth>11){viewMonth=0; viewYear++;} renderCal(); }
+
+  function renderCal() {
+    const monthName = new Date(viewYear, viewMonth, 1)
+      .toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+    document.getElementById('calMonth').textContent = monthName;
+
+    const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+    const todayIso    = todayISO();
+
+    const byDate = {};
+    cache.forEach(b => { (byDate[b.date] = byDate[b.date]||[]).push(b); });
+
+    let html = '';
+    for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso    = isoDate(viewYear, viewMonth, d);
+      const bks    = byDate[iso] || [];
+      const isToday = iso === todayIso;
+      const isPast  = iso < todayIso;
+
+      const stdBk  = bks.find(b => b.boxType === 'standard');
+      const reiBk  = bks.find(b => b.boxType === 'reinforced');
+
+      const dots = [
+        stdBk ? `<div class="dot dot-std-${stdBk.status}"></div>` : '',
+        reiBk ? `<div class="dot dot-rei-${reiBk.status}"></div>` : '',
+      ].join('');
+
+      html += `
+        <div class="cal-day${isToday?' today':''}${isPast?' past':''}" onclick="tapDay('${iso}')">
+          <div class="day-num">${d}</div>
+          <div class="day-dots">${dots}</div>
+        </div>`;
+    }
+
+    document.getElementById('calDays').innerHTML = html;
+  }
+
+  // ── Tap a day ─────────────────────────────────────────────────────────────────
+  function tapDay(iso) {
+    const bks = cache.filter(b => b.date === iso);
+
+    if (bks.length === 0) {
+      openAddForm(iso, currentType);
+      return;
+    }
+
+    const d = new Date(iso+'T00:00:00');
+    const dateLabel = d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'});
+    document.getElementById('sheetTitle').textContent = dateLabel;
+
+    const hasStd = bks.some(b => b.boxType === 'standard');
+    const hasRei = bks.some(b => b.boxType === 'reinforced');
+
+    let html = '<div class="day-detail">';
+    bks.forEach(b => {
+      const color = TYPE_COLOR[b.boxType];
+      const typeLabel = b.boxType === 'standard' ? 'Standard' : 'Reinforced';
+      html += `
+        <div class="detail-booking" onclick="openEditForm('${b.id}')">
+          <div class="detail-dot" style="background:${color}"></div>
+          <div class="detail-info">
+            <div class="detail-batch">${b.batch||'—'}</div>
+            <div class="detail-meta">${typeLabel} · ${fmtTime(b.time)} · ${STATUS_LABEL[b.status]}</div>
+          </div>
+          <span style="font-size:13px;color:var(--muted)">›</span>
+        </div>`;
+    });
+
+    html += '<div class="add-for">';
+    if (!hasStd) html += `<button class="add-for-btn std-add" onclick="openAddForm('${iso}','standard')">+ Standard</button>`;
+    if (!hasRei) html += `<button class="add-for-btn rei-add" onclick="openAddForm('${iso}','reinforced')">+ Reinforced</button>`;
+    html += '</div></div>';
+
+    document.getElementById('sheetContent').innerHTML = html;
+    document.getElementById('sheetOverlay').classList.add('open');
+  }
+
+  // ── Forms ─────────────────────────────────────────────────────────────────────
+  function openAddForm(iso, type) {
+    editingId = null;
+    const d = new Date(iso+'T00:00:00');
+    document.getElementById('sheetTitle').textContent =
+      d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'});
+    document.getElementById('sheetContent').innerHTML = bookingForm(iso, type, null);
+    document.getElementById('sheetOverlay').classList.add('open');
+  }
+
+  function openEditForm(id) {
+    const b = cache.find(x => x.id === id);
+    if (!b) return;
+    editingId = id;
+    const d = new Date(b.date+'T00:00:00');
+    document.getElementById('sheetTitle').textContent =
+      d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'});
+    document.getElementById('sheetContent').innerHTML = bookingForm(b.date, b.boxType, b);
+    document.getElementById('sheetOverlay').classList.add('open');
+  }
+
+  function bookingForm(iso, type, prefill) {
+    const color = type === 'standard' ? 'std' : 'rei';
+    const s = prefill ? prefill.status : 'confirmed';
+    return `
+    <div class="sheet-body">
+      <input type="hidden" id="f-date" value="${iso}" />
+      <input type="hidden" id="f-type" value="${type}" />
+      <input type="hidden" id="f-status" value="${s}" />
+      <div class="field">
+        <div class="field-label">Batch Name</div>
+        <input type="text" id="f-batch" placeholder="e.g. Batch 24 or Batch A3" value="${prefill?prefill.batch:''}" />
+      </div>
+      <div class="field">
+        <div class="field-label">Time</div>
+        <input type="time" id="f-time" value="${prefill?prefill.time:'14:00'}" />
+      </div>
+      <div class="field">
+        <div class="field-label">Status</div>
+        <div class="status-row">
+          <div class="s-chip${s==='confirmed'?' sel-confirmed':''}" onclick="selStatus(event,'confirmed')">Confirmed</div>
+          <div class="s-chip${s==='softbooked'?' sel-softbooked':''}" onclick="selStatus(event,'softbooked')">Soft Book</div>
+          <div class="s-chip${s==='pending'?' sel-pending':''}" onclick="selStatus(event,'pending')">Pending</div>
+        </div>
+      </div>
+      <button class="save-btn ${color}" id="saveBtn" onclick="saveBooking()">Save</button>
+      ${prefill ? `<button class="delete-btn" onclick="deleteBooking('${prefill.id}')">Delete</button>` : ''}
+    </div>`;
+  }
+
+  function selStatus(e, s) {
+    document.getElementById('f-status').value = s;
+    document.querySelectorAll('.s-chip').forEach(c => c.className = 's-chip');
+    e.currentTarget.className = `s-chip sel-${s}`;
+  }
+
+  // ── Save / Delete ─────────────────────────────────────────────────────────────
+  async function saveBooking() {
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const booking = {
+      id:      editingId || uid(),
+      date:    document.getElementById('f-date').value,
+      batch:   document.getElementById('f-batch').value.trim(),
+      time:    document.getElementById('f-time').value,
+      boxType: document.getElementById('f-type').value,
+      status:  document.getElementById('f-status').value,
+    };
+
+    const action = editingId ? 'update' : 'add';
+    await apiCall({ action, data: JSON.stringify(booking) });
+
+    closeSheet();
+    renderCal();
+    renderList();
+    showToast(editingId ? 'Booking updated' : 'Booking saved');
+  }
+
+  async function deleteBooking(id) {
+    if (!confirm('Delete this booking?')) return;
+    await apiCall({ action: 'delete', id });
+    closeSheet();
+    renderCal();
+    renderList();
+    showToast('Booking deleted');
+  }
+
+  // ── Sheet ─────────────────────────────────────────────────────────────────────
+  function closeSheet() {
+    document.getElementById('sheetOverlay').classList.remove('open');
+  }
+
+  function handleOverlay(e) {
+    if (e.target === document.getElementById('sheetOverlay')) closeSheet();
+  }
+
+  // ── Upcoming list ─────────────────────────────────────────────────────────────
+  function renderList() {
+    const todayI   = todayISO();
+    const upcoming = cache
+      .filter(b => b.date >= todayI)
+      .sort((a,b) => a.date.localeCompare(b.date) || a.boxType.localeCompare(b.boxType))
+      .slice(0, 12);
+
+    const el = document.getElementById('upList');
+    if (!upcoming.length) {
+      el.innerHTML = '<div class="up-empty">No upcoming bookings</div>';
+      return;
+    }
+
+    el.innerHTML = upcoming.map(b => `
+      <div class="up-row">
+        <div class="up-dot" style="background:${TYPE_COLOR[b.boxType]}"></div>
+        <div class="up-date">${fmtShort(b.date)}</div>
+        <div class="up-batch">${b.batch||'—'}</div>
+        <span class="up-badge badge-${b.status}">${STATUS_LABEL[b.status]}</span>
+      </div>`).join('');
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  async function init() {
+    initCal();
+    await fetchAll();
+    renderCal();
+    renderList();
+  }
+
+  init();
+</script>
+</body>
+</html>
