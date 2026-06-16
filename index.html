@@ -26,6 +26,7 @@
       min-height: 100vh;
       max-width: 430px;
       margin: 0 auto;
+      touch-action: manipulation; /* prevent double-tap zoom */
     }
 
     header {
@@ -567,19 +568,6 @@
       min-height: 18px;
     }
 
-    .sel-count {
-      font-size: 12px;
-      font-weight: 700;
-      color: white;
-      background: #334155;
-      border-radius: 50px;
-      padding: 2px 10px;
-      position: absolute;
-      top: 8px; right: 10px;
-      pointer-events: none;
-      z-index: 10;
-    }
-
     .toast {
       position: fixed;
       bottom: 24px;
@@ -635,7 +623,6 @@
     <span class="sel-bar-label" id="selBarLabel">Tap dates to select</span>
     <button class="sel-bar-book" id="selBarBook" onclick="bookSelected()" disabled>Book</button>
   </div>
-  <span class="sel-count" id="selCount" style="display:none"></span>
   <div class="cal-grid" id="calGrid"></div>
 </div>
 
@@ -670,10 +657,8 @@
   let currentType = 'standard';
   let viewYear, viewMonth;
   let editingId   = null;
-  let selDates     = [];   // ISO strings of currently selected dates
-  let dragActive   = false;
-  let mouseDown    = false;
-  let multiSelMode = false; // non-consecutive tap-select mode
+  let selDates     = [];   // ISO strings selected in multiSelMode
+  let multiSelMode = false;
 
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -834,88 +819,57 @@
     document.getElementById('calGrid').innerHTML = html;
   }
 
-  // ── Drag-select & multi-select ───────────────────────────────────────────────
+  // ── Calendar tap events ───────────────────────────────────────────────────────
   function attachCalEvents() {
     const grid = document.getElementById('calGrid');
     let touchStartDate = null;
-    let touchMoved     = false;
 
+    // Touch: tap only
     grid.addEventListener('touchstart', e => {
       const day = e.target.closest('[data-date]');
       if (!day) return;
       e.preventDefault();
-      dragActive     = true;
       touchStartDate = day.dataset.date;
-      touchMoved     = false;
-      if (!multiSelMode) {
-        selDates = [];
-        addSel(day.dataset.date);
-      }
     }, { passive: false });
 
     grid.addEventListener('touchmove', e => {
-      if (!dragActive) return;
-      e.preventDefault();
-      const t   = e.touches[0];
-      const el  = document.elementFromPoint(t.clientX, t.clientY);
-      const day = el && el.closest('[data-date]');
-      if (day && day.dataset.date !== touchStartDate && !touchMoved) {
-        touchMoved = true;
-        if (multiSelMode) addSel(touchStartDate);
-      }
-      if (day && touchMoved) addSel(day.dataset.date);
+      if (touchStartDate) e.preventDefault(); // prevent page scroll while touching a day
     }, { passive: false });
 
     grid.addEventListener('touchend', e => {
-      if (!dragActive) return;
+      if (!touchStartDate) return;
       e.preventDefault();
-      dragActive = false;
-      if (multiSelMode) {
-        if (!touchMoved && touchStartDate) toggleSelDate(touchStartDate);
-        updateSelBar();
-      } else {
-        finishSel();
-      }
+      const date = touchStartDate;
+      touchStartDate = null;
+      handleDayTap(date);
     });
 
-    // Mouse support (desktop / testing)
-    let mouseStartDate = null, mouseMoved = false;
-    grid.addEventListener('mousedown', e => {
+    // Mouse (desktop / testing)
+    grid.addEventListener('click', e => {
       const day = e.target.closest('[data-date]');
       if (!day) return;
-      mouseDown     = true;
-      mouseStartDate = day.dataset.date;
-      mouseMoved     = false;
-      if (!multiSelMode) { selDates = []; addSel(day.dataset.date); }
+      handleDayTap(day.dataset.date);
     });
-    grid.addEventListener('mouseover', e => {
-      if (!mouseDown) return;
-      const day = e.target.closest('[data-date]');
-      if (day && day.dataset.date !== mouseStartDate && !mouseMoved) {
-        mouseMoved = true;
-        if (multiSelMode) addSel(mouseStartDate);
-      }
-      if (day && mouseMoved) addSel(day.dataset.date);
-    });
-    document.addEventListener('mouseup', () => {
-      if (!mouseDown) return;
-      mouseDown = false;
-      if (multiSelMode) {
-        if (!mouseMoved && mouseStartDate) toggleSelDate(mouseStartDate);
-        updateSelBar();
-      } else {
-        finishSel();
-      }
-    });
+  }
+
+  function handleDayTap(date) {
+    if (multiSelMode) {
+      toggleSelDate(date);
+      updateSelBar();
+    } else {
+      const bks = cache.filter(b => b.date === date);
+      bks.length ? openDayDetail(date, bks) : openAddForm(date, currentType);
+    }
   }
 
   function toggleSelDate(iso) {
     if (selDates.includes(iso)) {
       selDates = selDates.filter(d => d !== iso);
-      updateHighlights();
     } else {
-      addSel(iso);
+      selDates.push(iso);
+      selDates.sort();
     }
+    updateHighlights();
   }
 
   function updateHighlights() {
@@ -924,26 +878,9 @@
     });
   }
 
-  function addSel(iso) {
-    if (!selDates.includes(iso)) {
-      selDates.push(iso);
-      selDates.sort();
-    }
-    updateHighlights();
-    // Drag-mode badge (only outside multiSelMode)
-    const badge = document.getElementById('selCount');
-    if (!multiSelMode && selDates.length > 1) {
-      badge.textContent = selDates.length + ' dates';
-      badge.style.display = '';
-    } else {
-      badge.style.display = 'none';
-    }
-  }
-
   function clearSel() {
     selDates = [];
     updateHighlights();
-    document.getElementById('selCount').style.display = 'none';
   }
 
   // ── Multi-select mode (non-consecutive tap) ───────────────────────────────────
@@ -981,19 +918,6 @@
     } else {
       openMultiForm(dates);
     }
-  }
-
-  function finishSel() {
-    if (selDates.length === 0) return;
-    if (selDates.length === 1) {
-      const iso = selDates[0];
-      clearSel();
-      const bks = cache.filter(b => b.date === iso);
-      bks.length ? openDayDetail(iso, bks) : openAddForm(iso, currentType);
-      return;
-    }
-    openMultiForm([...selDates]);
-    clearSel();
   }
 
   function openDayDetail(iso, bks) {
