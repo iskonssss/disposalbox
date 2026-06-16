@@ -698,7 +698,8 @@
       const data = await res.json();
       cache = Array.isArray(data) ? data.map(b => ({
         ...b,
-        date: String(b.date || '').slice(0, 10), // normalize Google Sheets Date timestamps to YYYY-MM-DD
+        date: String(b.date || '').slice(0, 10),
+        time: normalizeTime(b.time),
       })) : [];
       saveLocal(cache);
       setSyncState('ok');
@@ -738,6 +739,20 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+  // Normalize time values from Google Sheets (may arrive as "1899-12-30T07:04:35.000Z" or "15:04")
+  function normalizeTime(t) {
+    if (!t) return '14:00';
+    const s = String(t);
+    if (s === '09:00' || s === '14:00') return s;
+    if (s.includes('T')) {
+      // ISO datetime from Sheets time cell — convert UTC hour to SGT (UTC+8) and bucket
+      const sgtHour = (parseInt(s.slice(11, 13), 10) + 8) % 24;
+      return sgtHour < 12 ? '09:00' : '14:00';
+    }
+    // Apps Script formatted like "09:15" or "15:04"
+    return parseInt(s.split(':')[0], 10) < 12 ? '09:00' : '14:00';
+  }
 
   function todayISO() {
     const d = today;

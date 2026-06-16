@@ -172,6 +172,10 @@ function doGet(e) {
           const key = KEY_MAP[String(h).toLowerCase()] || String(h).toLowerCase();
           let val = r[i];
           if (key === 'date' && val instanceof Date) val = toDateISO(val);
+          if (key === 'time' && val instanceof Date) {
+            // Time cells stored as numeric fraction come back as Date objects
+            val = Utilities.formatDate(val, Session.getScriptTimeZone(), 'HH:mm');
+          }
           obj[key] = val;
         });
         return obj;
