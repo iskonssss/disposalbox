@@ -1,6 +1,9 @@
 // ID of your BOOKING spreadsheet (not the invoice one)
 const BOOKING_SS_ID = '1ZqZ_4pwdiGwltgQtnUBBYMngo1lS4h8AGshMyInMtoY';
 
+// ID of your INVOICE spreadsheet
+const INVOICE_SS_ID = '1FzR1mWku-Vn2fMUDThWybrWYDo9QpBfga3bKZZaQRL0';
+
 // Tab name in the INVOICE spreadsheet where the invoice lives
 const INVOICE_TAB = '10xxB Invoice - Alex Sutrex Singapore';
 
@@ -12,6 +15,26 @@ function onOpen() {
     .createMenu('Sutrex')
     .addItem('Refresh Invoice from Bookings', 'refreshInvoice')
     .addToUi();
+}
+
+// ── Web app entry point (called from phone) ───────────────────────────────────
+
+function doGet(e) {
+  if ((e.parameter.action || '') === 'invoice') {
+    try {
+      const result = runRefreshInvoice();
+      return json({ ok: true, invoiceNum: result.invoiceNum, quantity: result.quantity });
+    } catch (err) {
+      return json({ ok: false, error: err.message });
+    }
+  }
+  return json({ error: 'unknown action' });
+}
+
+function json(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ── Invoice number helper ─────────────────────────────────────────────────────
@@ -105,16 +128,23 @@ function saveInvoiceAsPDF(invoiceNum) {
 
 // ── Main refresh function ─────────────────────────────────────────────────────
 
+// Called from sheet button — shows alert on completion
 function refreshInvoice() {
+  const result = runRefreshInvoice();
+  const monthLabel = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM yyyy');
+  SpreadsheetApp.getUi().alert(
+    `Done!\nInvoice: ${result.invoiceNum}\n${result.quantity} booking(s) invoiced.\n\nPDF saved to Drive → ${monthLabel}`
+  );
+}
+
+// Core logic — returns { invoiceNum, quantity }; safe to call from doGet
+function runRefreshInvoice() {
   // ── 1. Read bookings ──────────────────────────────────────────────────────
   const bookingSS    = SpreadsheetApp.openById(BOOKING_SS_ID);
   const bookingSheet = bookingSS.getSheetByName('Bookings');
   const raw          = bookingSheet.getDataRange().getValues();
 
-  if (raw.length <= 1) {
-    SpreadsheetApp.getUi().alert('No bookings found in the booking sheet.');
-    return;
-  }
+  if (raw.length <= 1) throw new Error('No bookings found.');
 
   const headers     = raw[0].map(h => String(h).toLowerCase().trim());
   const idxId       = headers.indexOf('id');
@@ -147,10 +177,7 @@ function refreshInvoice() {
   // ── 2. Build pickup list ──────────────────────────────────────────────────
   const quantity = bookings.length;
 
-  if (quantity === 0) {
-    SpreadsheetApp.getUi().alert('No new confirmed bookings to invoice (all already marked as invoiced).');
-    return;
-  }
+  if (quantity === 0) throw new Error('No uninvoiced confirmed bookings found.');
 
   const pickupList = bookings.map((b, i) => {
     const d       = b.date instanceof Date ? b.date : new Date(String(b.date).slice(0, 10) + 'T00:00:00');
@@ -166,7 +193,7 @@ function refreshInvoice() {
 
   // ── 4. Write to invoice sheet ─────────────────────────────────────────────
   const invoiceSheet = SpreadsheetApp
-    .getActiveSpreadsheet()
+    .openById(INVOICE_SS_ID)
     .getSheetByName(INVOICE_TAB);
 
   invoiceSheet.getRange('A6').setValue(nextInvoiceNum);
@@ -183,10 +210,7 @@ function refreshInvoice() {
 
   // ── 6. Flush writes then export PDF ──────────────────────────────────────
   SpreadsheetApp.flush();
-  const monthLabel = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM yyyy');
   saveInvoiceAsPDF(nextInvoiceNum);
 
-  SpreadsheetApp.getUi().alert(
-    `Done!\nInvoice: ${nextInvoiceNum}\n${quantity} booking(s) invoiced.\n\nPDF saved to Drive → ${monthLabel}`
-  );
+  return { invoiceNum: nextInvoiceNum, quantity };
 }

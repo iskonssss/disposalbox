@@ -242,6 +242,7 @@
       cursor: pointer;
     }
     .up-row:active { background: var(--bg); }
+    .up-row.pressing { background: #e2e8f0; transition: background 0.1s; }
     .up-row:last-child { border-bottom: none; }
 
     .up-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -603,6 +604,7 @@
     <p>Medical Disposal Boxes</p>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
+    <button onclick="triggerInvoice()" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;cursor:pointer" id="invBtn">Invoice</button>
     <a href="inventory.html" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;text-decoration:none">Materials</a>
     <button class="refresh-btn" onclick="manualRefresh()" title="Refresh">↻</button>
     <div class="sync-dot syncing" id="syncDot" title="Syncing..."></div>
@@ -661,7 +663,8 @@
 
 <script>
   // ── Config ───────────────────────────────────────────────────────────────────
-  const API = 'https://script.google.com/macros/s/AKfycbw6q7oo2tx_Jfy0sk8b-fWr2Ip4dcnHzdTJOdQF9EfmhDZq50WrVGChOH4OFk5wZCaS/exec';
+  const API         = 'https://script.google.com/macros/s/AKfycbw6q7oo2tx_Jfy0sk8b-fWr2Ip4dcnHzdTJOdQF9EfmhDZq50WrVGChOH4OFk5wZCaS/exec';
+  const INVOICE_API = ''; // ← paste Invoice Apps Script web app URL here after deploying
 
   // ── State ────────────────────────────────────────────────────────────────────
   let cache       = [];
@@ -1177,13 +1180,6 @@
           <div class="s-chip${s==='pending'?' sel-pending':''}"   onclick="selStatus(event,'pending')">Pending</div>
         </div>
       </div>
-      ${prefill ? `
-      <div class="field">
-        <div class="field-label">Invoice</div>
-        <div class="status-row">
-          <div class="i-chip${inv?' sel-inv':''}" onclick="toggleInvoiced(event)">${inv ? '✓ Invoiced' : 'Not invoiced'}</div>
-        </div>
-      </div>` : ''}
       <button class="save-btn ${color}" id="saveBtn" onclick="saveBooking()">Save</button>
       ${prefill ? `<button class="delete-btn" onclick="deleteBooking('${prefill.id}')">Delete</button>` : ''}
     </div>`;
@@ -1267,14 +1263,64 @@
     if (e.target === document.getElementById('sheetOverlay')) closeSheet();
   }
 
+  // ── Long-press to toggle invoiced ────────────────────────────────────────────
+  let _lpTimer = null;
+  let _lpFired = false;
+
+  function rowLpStart(e, id) {
+    _lpFired = false;
+    const row = e.target.closest('.up-row');
+    if (row) row.classList.add('pressing');
+    _lpTimer = setTimeout(() => {
+      _lpFired = true;
+      if (row) row.classList.remove('pressing');
+      if (navigator.vibrate) navigator.vibrate(40);
+      toggleInvoicedDirect(id);
+    }, 600);
+  }
+
+  function rowLpMove(e) {
+    clearTimeout(_lpTimer);
+    const row = e.target.closest('.up-row');
+    if (row) row.classList.remove('pressing');
+  }
+
+  function rowLpEnd(e) {
+    clearTimeout(_lpTimer);
+    const row = e.target.closest('.up-row');
+    if (row) row.classList.remove('pressing');
+  }
+
+  function rowLpClick(e, id) {
+    if (_lpFired) { _lpFired = false; return; }
+    openEditForm(id);
+  }
+
+  function toggleInvoicedDirect(id) {
+    const idx = cache.findIndex(b => b.id === id);
+    if (idx === -1) return;
+    const b = { ...cache[idx] };
+    const wasInv = b.invoiced === true || String(b.invoiced).toLowerCase() === 'true';
+    b.invoiced = !wasInv;
+    cache[idx] = b;
+    saveLocal(cache);
+    renderList();
+    showToast(b.invoiced ? '✓ Invoiced' : 'Not invoiced');
+    bgSync(`action=update&data=${encodeURIComponent(JSON.stringify(b))}`);
+  }
+
   // ── Lists ─────────────────────────────────────────────────────────────────────
   function renderRow(b) {
     const isInv  = b.invoiced === true || String(b.invoiced).toLowerCase() === 'true';
     const invIcon = isInv
-      ? '<span style="font-size:14px;color:#16a34a;font-weight:700;flex-shrink:0">✓</span>'
-      : '<span style="font-size:14px;color:#ef4444;font-weight:700;flex-shrink:0">✗</span>';
+      ? '<span style="font-size:14px;color:#16a34a;font-weight:700">✓</span>'
+      : '<span style="font-size:14px;color:#ef4444;font-weight:700">✗</span>';
     return `
-      <div class="up-row" onclick="openEditForm('${b.id}')">
+      <div class="up-row" data-id="${b.id}"
+           ontouchstart="rowLpStart(event,'${b.id}')"
+           ontouchmove="rowLpMove(event)"
+           ontouchend="rowLpEnd(event)"
+           onclick="rowLpClick(event,'${b.id}')">
         <div class="up-dot" style="background:${TYPE_COLOR[b.boxType]}"></div>
         <div class="up-date">${fmtShort(b.date)}</div>
         <div class="up-batch">${b.batch||'—'} · ${displayTime(b.time)} ${invIcon}</div>
@@ -1305,6 +1351,27 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────────
+  async function triggerInvoice() {
+    if (!INVOICE_API) { showToast('Invoice API not configured'); return; }
+    const btn = document.getElementById('invBtn');
+    btn.textContent = '…';
+    btn.disabled = true;
+    try {
+      const res  = await fetch(`${INVOICE_API}?action=invoice`);
+      const data = await res.json();
+      if (data.ok) {
+        showToast(`Invoice ${data.invoiceNum} — ${data.quantity} booking(s)`);
+        await fetchAll(); renderCal(); renderList();
+      } else {
+        showToast('Invoice error: ' + (data.error || 'unknown'));
+      }
+    } catch (err) {
+      showToast('Invoice failed: ' + err.message);
+    }
+    btn.textContent = 'Invoice';
+    btn.disabled = false;
+  }
+
   async function manualRefresh() {
     await fetchAll();
     renderCal();
