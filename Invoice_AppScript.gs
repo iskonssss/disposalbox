@@ -16,12 +16,9 @@ function onOpen() {
 
 // ── Invoice number helper ─────────────────────────────────────────────────────
 
-// Scans all year/month subfolders in the invoices Drive folder,
-// extracts invoice numbers from filenames (pattern: 1235B Invoice - ...).
-// Returns the highest number found, or 1000 if none found.
 function getLatestInvoiceNumber() {
-  const root    = DriveApp.getFolderById(INVOICES_FOLDER_ID);
-  let maxNum    = 1000;
+  const root = DriveApp.getFolderById(INVOICES_FOLDER_ID);
+  let maxNum = 1000;
 
   const yearFolders = root.getFolders();
   while (yearFolders.hasNext()) {
@@ -45,6 +42,65 @@ function getLatestInvoiceNumber() {
   }
 
   return maxNum;
+}
+
+// ── Folder helpers ────────────────────────────────────────────────────────────
+
+function getOrCreateFolder(parent, name) {
+  const iter = parent.getFoldersByName(name);
+  return iter.hasNext() ? iter.next() : parent.createFolder(name);
+}
+
+function getMonthFolder() {
+  const now        = new Date();
+  const year       = String(now.getFullYear());
+  const monthNum   = now.getMonth() + 1; // 1–12
+  const monthName  = Utilities.formatDate(now, Session.getScriptTimeZone(), 'MMMM'); // e.g. "June"
+  const monthLabel = `${monthNum} ${monthName}`; // e.g. "6 June"
+
+  const root       = DriveApp.getFolderById(INVOICES_FOLDER_ID);
+  const yearFolder = getOrCreateFolder(root, year);
+  return getOrCreateFolder(yearFolder, monthLabel);
+}
+
+// ── PDF export ────────────────────────────────────────────────────────────────
+
+function saveInvoiceAsPDF(invoiceNum) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(INVOICE_TAB);
+  const ssId  = ss.getId();
+  const gid   = sheet.getSheetId();
+
+  const url = `https://docs.google.com/spreadsheets/d/${ssId}/export` +
+    `?format=pdf` +
+    `&gid=${gid}` +
+    `&size=A4` +
+    `&portrait=true` +
+    `&fitw=true` +
+    `&sheetnames=false` +
+    `&printtitle=false` +
+    `&pagenumbers=false` +
+    `&gridlines=false` +
+    `&fzr=false`;
+
+  const response = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true,
+  });
+
+  if (response.getResponseCode() !== 200) {
+    throw new Error('PDF export failed: ' + response.getContentText());
+  }
+
+  const filename = `${invoiceNum} Invoice - Alex Sutrex Singapore.pdf`;
+  const blob     = response.getBlob().setName(filename);
+  const folder   = getMonthFolder();
+
+  // Replace existing file with same name (avoid Drive duplicates)
+  const existing = folder.getFilesByName(filename);
+  while (existing.hasNext()) existing.next().setTrashed(true);
+
+  folder.createFile(blob);
 }
 
 // ── Main refresh function ─────────────────────────────────────────────────────
@@ -98,7 +154,7 @@ function refreshInvoice() {
 
   const pickupList = bookings.map((b, i) => {
     const d       = b.date instanceof Date ? b.date : new Date(String(b.date).slice(0, 10) + 'T00:00:00');
-    const dateStr = d.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+    const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     const timeStr = (String(b.time) === '09:00') ? '9am' : '2pm';
     const suffix  = b.boxType === 'reinforced' ? ' - REINFORCE' : '';
     return `${i + 1}) ${dateStr} - ${b.batch} - ${timeStr}${suffix}`;
@@ -113,10 +169,10 @@ function refreshInvoice() {
     .getActiveSpreadsheet()
     .getSheetByName(INVOICE_TAB);
 
-  invoiceSheet.getRange('A6').setValue(nextInvoiceNum); // invoice number (A6:B6 merged)
-  invoiceSheet.getRange('C6').setValue(new Date());     // today's date (C6:D6 merged, keeps existing format)
-  invoiceSheet.getRange('H16').setValue(quantity);      // quantity
-  invoiceSheet.getRange('B18').setValue(pickupList);    // pickup list
+  invoiceSheet.getRange('A6').setValue(nextInvoiceNum);
+  invoiceSheet.getRange('C6').setValue(new Date());
+  invoiceSheet.getRange('H16').setValue(quantity);
+  invoiceSheet.getRange('B18').setValue(pickupList);
 
   // ── 5. Mark bookings as invoiced in booking sheet ─────────────────────────
   if (idxInvoiced >= 0) {
@@ -125,7 +181,12 @@ function refreshInvoice() {
     });
   }
 
+  // ── 6. Flush writes then export PDF ──────────────────────────────────────
+  SpreadsheetApp.flush();
+  const monthLabel = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM yyyy');
+  saveInvoiceAsPDF(nextInvoiceNum);
+
   SpreadsheetApp.getUi().alert(
-    `Done!\nInvoice: ${nextInvoiceNum}\n${quantity} bookings written and marked as invoiced.`
+    `Done!\nInvoice: ${nextInvoiceNum}\n${quantity} booking(s) invoiced.\n\nPDF saved to Drive → ${monthLabel}`
   );
 }
