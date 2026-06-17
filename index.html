@@ -114,11 +114,12 @@
 
     /* Calendar */
     .cal-wrap {
-      background: var(--card);
+      background: var(--std-bg);
       margin: 8px 6px 0;
       border-radius: 14px;
       overflow: hidden;
       box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      transition: background 0.25s;
     }
 
     .cal-nav {
@@ -792,6 +793,8 @@
     currentType = t;
     document.getElementById('tab-std').className = 'type-tab' + (t==='standard' ? ' active-std' : '');
     document.getElementById('tab-rei').className = 'type-tab' + (t==='reinforced' ? ' active-rei' : '');
+    document.querySelector('.cal-wrap').style.background =
+      t === 'standard' ? 'var(--std-bg)' : 'var(--rei-bg)';
   }
 
   // ── Calendar ──────────────────────────────────────────────────────────────────
@@ -853,16 +856,13 @@
       startX = currX = e.touches[0].clientX;
       startY = currY = e.touches[0].clientY;
       const day = e.target.closest('[data-date]');
-      if (!day) return;
-      e.preventDefault();
-      touchStartDate = day.dataset.date;
-    }, { passive: false });
+      touchStartDate = day ? day.dataset.date : null;
+    }, { passive: true });
 
     grid.addEventListener('touchmove', e => {
       currX = e.touches[0].clientX;
       currY = e.touches[0].clientY;
-      if (touchStartDate) e.preventDefault();
-    }, { passive: false });
+    }, { passive: true });
 
     grid.addEventListener('touchend', e => {
       const dx = currX - startX;
@@ -872,6 +872,12 @@
       if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
         touchStartDate = null;
         dx < 0 ? nextMonth() : prevMonth();
+        return;
+      }
+
+      // Vertical scroll: cancel tap if finger moved more than 10px up/down
+      if (Math.abs(dy) > 10) {
+        touchStartDate = null;
         return;
       }
 
