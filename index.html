@@ -577,6 +577,83 @@
       min-height: 18px;
     }
 
+    /* PIN modal */
+    .pin-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 500;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .pin-overlay.open { display: flex; }
+
+    .pin-sheet {
+      background: white;
+      border-radius: 20px 20px 0 0;
+      padding: 24px 24px 48px;
+      width: 100%;
+      max-width: 430px;
+      animation: up 0.22s ease;
+    }
+
+    .pin-title {
+      text-align: center;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 24px;
+    }
+
+    .pin-dots {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      margin-bottom: 32px;
+    }
+    .pin-dot {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: white;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .pin-dot.filled { background: #1e293b; border-color: #1e293b; }
+    .pin-dot.error  { background: #ef4444; border-color: #ef4444; }
+
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%      { transform: translateX(-10px); }
+      40%      { transform: translateX(10px); }
+      60%      { transform: translateX(-6px); }
+      80%      { transform: translateX(4px); }
+    }
+    .pin-dots.shake { animation: shake 0.35s ease; }
+
+    .pin-pad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .pin-key {
+      background: var(--bg);
+      border: none;
+      border-radius: 14px;
+      padding: 18px 8px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      text-align: center;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .pin-key:active { background: #cbd5e1; }
+    .pin-key.del    { font-size: 18px; color: var(--muted); }
+    .pin-key.cancel { font-size: 13px; color: var(--muted); }
+
     .toast {
       position: fixed;
       bottom: 24px;
@@ -607,7 +684,7 @@
     <p>Medical Disposal Boxes</p>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
-    <button onclick="triggerInvoice()" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;cursor:pointer" id="invBtn">Invoice</button>
+    <button onclick="openPinModal()" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;cursor:pointer" id="invBtn">Invoice</button>
     <a href="inventory.html" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;text-decoration:none">Materials</a>
     <button class="refresh-btn" onclick="manualRefresh()" title="Refresh">↻</button>
     <div class="sync-dot syncing" id="syncDot" title="Syncing..."></div>
@@ -662,12 +739,39 @@
   </div>
 </div>
 
+<div class="pin-overlay" id="pinOverlay">
+  <div class="pin-sheet">
+    <div class="pin-title">Enter PIN to generate invoice</div>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key cancel" onclick="closePinModal()">Cancel</button>
+      <button class="pin-key" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinDelete()">⌫</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
   // ── Config ───────────────────────────────────────────────────────────────────
   const API         = 'https://script.google.com/macros/s/AKfycbw6q7oo2tx_Jfy0sk8b-fWr2Ip4dcnHzdTJOdQF9EfmhDZq50WrVGChOH4OFk5wZCaS/exec';
   const INVOICE_API = 'https://script.google.com/macros/s/AKfycbyG39b4ub4AndCwwOp8CPcvUDz59ZfJ2hzDM-mc5fvhSyvW2ibmfTXM3RINf-7j986A/exec';
+  const INVOICE_PIN = '5122'; // ← change to your preferred 4-digit PIN
 
   // ── State ────────────────────────────────────────────────────────────────────
   let cache       = [];
@@ -1354,6 +1458,56 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────────
+  // ── PIN modal ─────────────────────────────────────────────────────────────────
+  let _pin = '';
+
+  function openPinModal() {
+    _pin = '';
+    updatePinDots();
+    document.getElementById('pinOverlay').classList.add('open');
+  }
+
+  function closePinModal() {
+    _pin = '';
+    document.getElementById('pinOverlay').classList.remove('open');
+  }
+
+  function pinKey(digit) {
+    if (_pin.length >= 4) return;
+    _pin += digit;
+    updatePinDots();
+    if (_pin.length === 4) {
+      setTimeout(() => {
+        if (_pin === INVOICE_PIN) {
+          closePinModal();
+          triggerInvoice();
+        } else {
+          const dots = document.getElementById('pinDots');
+          document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('error'));
+          dots.classList.add('shake');
+          dots.addEventListener('animationend', () => {
+            dots.classList.remove('shake');
+            _pin = '';
+            updatePinDots();
+          }, { once: true });
+        }
+      }, 120);
+    }
+  }
+
+  function pinDelete() {
+    _pin = _pin.slice(0, -1);
+    updatePinDots();
+  }
+
+  function updatePinDots() {
+    for (let i = 0; i < 4; i++) {
+      const dot = document.getElementById('pd' + i);
+      dot.classList.toggle('filled', i < _pin.length);
+      dot.classList.remove('error');
+    }
+  }
+
   async function triggerInvoice() {
     if (!INVOICE_API) { showToast('Invoice API not configured'); return; }
     const btn = document.getElementById('invBtn');
