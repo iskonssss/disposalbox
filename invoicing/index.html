@@ -95,7 +95,8 @@
     .banner.err { background: var(--errbg); color: var(--err); border-color: #fcc9c2; }
     .hidden { display: none; }
     a.link { color: var(--accent); font-weight: 600; text-decoration: none; }
-    #previewFrame { width: 100%; height: 74vh; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; }
+    .preview-scaler { width: 100%; overflow: hidden; position: relative; }
+    #previewFrame { display: block; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; }
     .spinner { display: inline-block; width: 15px; height: 15px; vertical-align: -2px; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%; animation: spin .65s linear infinite; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .num-loading { color: var(--muted); font-style: italic; }
@@ -165,7 +166,9 @@
   <div id="previewCard" class="card hidden">
     <h2>Preview</h2>
     <div id="saveResult" class="banner ok hidden"></div>
-    <iframe id="previewFrame" title="Document preview"></iframe>
+    <div class="preview-scaler" id="previewScaler">
+      <iframe id="previewFrame" title="Document preview"></iframe>
+    </div>
   </div>
 
 </div>
@@ -358,7 +361,21 @@
     var blob = new Blob([arr], { type: 'application/pdf' });
     if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
     previewBlobUrl = URL.createObjectURL(blob);
-    $('previewFrame').src = previewBlobUrl;
+
+    var frame   = $('previewFrame');
+    var scaler  = $('previewScaler');
+    var natW    = 800;                        // PDF natural render width (px)
+    var natH    = Math.round(natW * 1.414);   // A4 ratio
+    var scale   = scaler.offsetWidth / natW;
+
+    frame.style.width           = natW + 'px';
+    frame.style.height          = natH + 'px';
+    frame.style.transform       = 'scale(' + scale + ')';
+    frame.style.transformOrigin = 'top left';
+    frame.style.borderRadius    = '12px';
+    scaler.style.height         = Math.round(natH * scale) + 'px';
+
+    frame.src = previewBlobUrl;
     $('previewCard').classList.remove('hidden');
     $('previewCard').scrollIntoView({ behavior: 'smooth' });
   }
