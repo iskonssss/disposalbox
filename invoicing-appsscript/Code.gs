@@ -99,6 +99,20 @@ function saveDocument_(data) {
 
 // ── SHEET WRITE ───────────────────────────────────────────────────────────────
 
+// Read column A every ROWS_PER_ITEM rows to find how many item blocks actually exist.
+// Column A holds the item number (1, 2, 3…) written by this script — reliable ground truth.
+function detectCurrentItemCount_(sheet) {
+  const lastRow = sheet.getLastRow();
+  let count = BASE_ITEM_COUNT;
+  for (let n = 2; n <= 20; n++) {
+    const row = FIRST_ITEM_ROW + (n - 1) * ROWS_PER_ITEM;
+    if (row > lastRow) break;
+    if (sheet.getRange(row, 1).getValue() === n) count = n;
+    else break;
+  }
+  return count;
+}
+
 function writeToSheet_(data) {
   const sheet = SpreadsheetApp.openById(INVOICE_SS_ID).getSheetByName(INVOICE_TAB);
   if (!sheet) throw new Error('Tab not found: "' + INVOICE_TAB + '"');
@@ -108,14 +122,14 @@ function writeToSheet_(data) {
 
   // ── Adjust item rows ──────────────────────────────────────────────────────
 
+  // Detect actual item count from sheet (column A) — don't trust Script Properties alone
   const props        = PropertiesService.getScriptProperties();
-  const currentCount = parseInt(props.getProperty('ITEM_ROW_COUNT') || BASE_ITEM_COUNT, 10);
+  const currentCount = detectCurrentItemCount_(sheet);
   const currentLast  = FIRST_ITEM_ROW + currentCount * ROWS_PER_ITEM - 1;
 
   if (newCount > currentCount) {
-    // Insert rows and copy format from first item block
-    const rowsToAdd      = (newCount - currentCount) * ROWS_PER_ITEM;
-    const templateRange  = sheet.getRange(FIRST_ITEM_ROW, 1, ROWS_PER_ITEM, sheet.getLastColumn());
+    const rowsToAdd     = (newCount - currentCount) * ROWS_PER_ITEM;
+    const templateRange = sheet.getRange(FIRST_ITEM_ROW, 1, ROWS_PER_ITEM, sheet.getLastColumn());
     sheet.insertRowsAfter(currentLast, rowsToAdd);
     for (let i = currentCount; i < newCount; i++) {
       templateRange.copyTo(
