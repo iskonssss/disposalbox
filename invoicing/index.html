@@ -130,38 +130,17 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .cog { position: absolute; top: 18px; right: 16px; font-size: 20px; cursor: pointer; opacity: .4; }
-    .cog:hover { opacity: .7; }
   </style>
 </head>
 <body>
 
-<!-- SETUP SCREEN -->
-<div id="setupScreen" class="wrap hidden">
-  <div class="brand">
-    <div class="mark">i</div>
-    <div><h1>General Invoicing</h1><p>First-time setup</p></div>
-  </div>
-  <div class="card">
-    <h2>Connect to Apps Script</h2>
-    <label>Apps Script web app URL</label>
-    <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
-    <label>API token</label>
-    <input id="cfgToken" type="password" placeholder="Set this in Script Properties → API_TOKEN">
-    <p class="note" style="margin-top:8px">In your Apps Script: Project Settings → Script properties → Add property <strong>API_TOKEN</strong> with any secret value.</p>
-  </div>
-  <div id="setupErr" class="banner err hidden"></div>
-  <button id="btnSetupSave" class="btn btn-primary" style="flex:unset;width:100%">Save &amp; connect</button>
-</div>
-
 <!-- MAIN APP -->
 <div id="appScreen" class="wrap hidden">
-  <div style="position:relative">
+  <div>
     <div class="brand">
       <div class="mark">i</div>
       <div><h1>General Invoicing</h1><p>Fill in the details, preview, then save to Drive.</p></div>
     </div>
-    <span class="cog" id="btnSettings" title="Settings">⚙</span>
   </div>
 
   <div id="seg" class="seg"></div>
@@ -229,7 +208,8 @@
 </div>
 
 <script>
-  var SCRIPT_URL = '', TOKEN = '';
+  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyO1-FJQTZ4qcLjOIVv4PmBYy66ThCsA4v2xPGieDCSqk5j7PO75qQEbk-dvnqJeUsn/exec';
+  var TOKEN      = '446924';
   var MODES = {}, MODE_ORDER = [], CURRENT = 'invoice';
   var numberEdited = false, previewBlobUrl = null;
 
@@ -238,41 +218,10 @@
   // ── BOOT ──────────────────────────────────────────────────────────────────
 
   function boot() {
-    SCRIPT_URL = localStorage.getItem('gi_url')   || '';
-    TOKEN      = localStorage.getItem('gi_token') || '';
-    if (!SCRIPT_URL || !TOKEN) { showSetup(); return; }
-    showApp();
-    loadInitialData();
-  }
-
-  function showSetup() {
-    $('setupScreen').classList.remove('hidden');
-    $('appScreen').classList.add('hidden');
-    $('actionBar').classList.add('hidden');
-    $('cfgUrl').value   = SCRIPT_URL;
-    $('cfgToken').value = TOKEN;
-  }
-
-  function showApp() {
-    $('setupScreen').classList.add('hidden');
     $('appScreen').classList.remove('hidden');
     $('actionBar').classList.remove('hidden');
-  }
-
-  $('btnSettings').addEventListener('click', showSetup);
-
-  $('btnSetupSave').addEventListener('click', function () {
-    var url   = $('cfgUrl').value.trim();
-    var token = $('cfgToken').value.trim();
-    if (!url || !token) { banner('setupErr', 'Both fields are required.'); return; }
-    hide('setupErr');
-    SCRIPT_URL = url;
-    TOKEN      = token;
-    localStorage.setItem('gi_url',   url);
-    localStorage.setItem('gi_token', token);
-    showApp();
     loadInitialData();
-  });
+  }
 
   // ── DATA LOAD ─────────────────────────────────────────────────────────────
 
@@ -280,8 +229,9 @@
     apiGet('getInitialData')
       .then(function (cfg) {
         if (cfg.error) { banner('errBanner', cfg.error); return; }
-        MODES      = cfg.modes;
-        MODE_ORDER = cfg.modeOrder;
+        MODES           = cfg.modes;
+        MODE_ORDER      = cfg.modeOrder;
+        window._nextNum = cfg.nextNumberRaw;
         $('dateOfIssue').value = cfg.today || '';
         buildSegments();
         selectMode(MODE_ORDER[0]);
@@ -471,23 +421,6 @@
   }
 
   // ── INIT ──────────────────────────────────────────────────────────────────
-
-  // Store nextNumberRaw on load so mode switcher can use it
-  var _origLoadInitialData = loadInitialData;
-  loadInitialData = function () {
-    apiGet('getInitialData')
-      .then(function (cfg) {
-        if (cfg.error) { banner('errBanner', cfg.error); return; }
-        MODES            = cfg.modes;
-        MODE_ORDER       = cfg.modeOrder;
-        window._nextNum  = cfg.nextNumberRaw;
-        $('dateOfIssue').value = cfg.today || '';
-        buildSegments();
-        selectMode(MODE_ORDER[0]);
-        if (cfg.warning) banner('warnBanner', cfg.warning);
-      })
-      .catch(function (err) { banner('errBanner', 'Failed to load: ' + err.message); });
-  };
 
   boot();
 </script>
