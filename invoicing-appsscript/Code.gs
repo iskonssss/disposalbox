@@ -165,6 +165,12 @@ function writeToSheet_(data) {
 
     const notesRow = base + 2;
 
+    // Item number (A, merged across 3 rows)
+    sheet.getRange('A' + base).setValue(i + 1);
+
+    // Line total formula (I, merged across 3 rows)
+    sheet.getRange('I' + base).setFormula('=IFERROR(G' + base + '*H' + base + ',0)');
+
     // Header row (row 1 of block) — show/hide based on toggle
     if (showLabels && item.header) {
       sheet.showRows(base);
