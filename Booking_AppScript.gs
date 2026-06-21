@@ -142,17 +142,19 @@ function syncAllToCalendar() {
   const rangeStart = new Date(); rangeStart.setMonth(rangeStart.getMonth() - 1);
   const rangeEnd   = new Date(); rangeEnd.setMonth(rangeEnd.getMonth() + 13);
 
-  // Group existing events by date (may be multiple per date)
-  const existingByDate = {};
+  // Key existing events by "deadlineISO_hour" so we can match them precisely
+  const existingByKey = {};
   cal.getEvents(rangeStart, rangeEnd)
     .filter(e => e.getTitle().includes('Cadaver Box'))
     .forEach(e => {
-      const key = toDateISO(e.getStartTime());
-      if (!existingByDate[key]) existingByDate[key] = [];
-      existingByDate[key].push(e);
+      const dateKey = toDateISO(e.getStartTime());
+      const sgtHour = (e.getStartTime().getUTCHours() + 8) % 24;
+      existingByKey[`${dateKey}_${sgtHour}`] = e;
     });
 
-  // Create events for each deadline — delete old ones first, then recreate
+  const usedKeys = new Set();
+
+  // Update in place where possible — only create/delete when truly needed
   Object.entries(deadlineMap).forEach(([deadlineISO, bookings]) => {
     // Standard first, then reinforced
     bookings.sort((a, b) => (a.boxType === 'standard' ? -1 : 1));
@@ -160,27 +162,35 @@ function syncAllToCalendar() {
     const cremDt    = sgtDate(bookings[0].cremationISO, 12, 0);
     const cremLabel = Utilities.formatDate(cremDt, 'Asia/Singapore', 'EEEE, d MMMM yyyy');
 
-    // Remove existing events for this date
-    (existingByDate[deadlineISO] || []).forEach(ev => ev.deleteEvent());
-    delete existingByDate[deadlineISO];
-
-    // One event per booking: 9am, 10am, 11am …
     bookings.forEach((b, i) => {
-      const hour    = 9 + i;
-      const startDt = sgtDate(deadlineISO, hour, 0);
-      const endDt   = new Date(startDt.getTime() + 60 * 60 * 1000);
-      const title   = `⚫ ${shortBatch(b.batch)} Cadaver Box`;
-      const desc    = `Cremation: ${cremLabel}`;
+      const hour  = 9 + i;
+      const key   = `${deadlineISO}_${hour}`;
+      const title = `⚫ ${shortBatch(b.batch)} Cadaver Box`;
+      const desc  = `Cremation: ${cremLabel}`;
 
-      const ev = cal.createEvent(title, startDt, endDt);
-      ev.setColor(CalendarApp.EventColor.GRAY);
-      ev.setDescription(desc);
-      ev.addPopupReminder((hour - 6) * 60); // reminder at 6am regardless of slot
+      usedKeys.add(key);
+
+      if (existingByKey[key]) {
+        // Event already exists — only write if something changed
+        const ev = existingByKey[key];
+        if (ev.getTitle()       !== title) ev.setTitle(title);
+        if (ev.getDescription() !== desc)  ev.setDescription(desc);
+      } else {
+        // New event needed
+        const startDt = sgtDate(deadlineISO, hour, 0);
+        const endDt   = new Date(startDt.getTime() + 60 * 60 * 1000);
+        const ev      = cal.createEvent(title, startDt, endDt);
+        ev.setColor(CalendarApp.EventColor.GRAY);
+        ev.setDescription(desc);
+        ev.addPopupReminder((hour - 6) * 60); // 6am reminder
+      }
     });
   });
 
-  // Delete events for dates no longer in the deadline map
-  Object.values(existingByDate).forEach(evs => evs.forEach(ev => ev.deleteEvent()));
+  // Delete only events that no longer have a matching booking
+  Object.entries(existingByKey).forEach(([key, ev]) => {
+    if (!usedKeys.has(key)) ev.deleteEvent();
+  });
 }
 
 // ── Web app (data API) ────────────────────────────────────────────────────────
