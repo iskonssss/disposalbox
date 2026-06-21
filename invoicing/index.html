@@ -218,12 +218,26 @@
   // ── ITEMS ─────────────────────────────────────────────────────────────────
   var items = [], idSeq = 0;
 
+  function saveItemValues() {
+    items.forEach(function (item) {
+      var h = $('header-' + item.id), d = $('deliv-' + item.id),
+          n = $('notes-'  + item.id), p = $('price-' + item.id), q = $('qty-' + item.id);
+      if (h) item._header = h.value;
+      if (d) item._deliv  = d.value;
+      if (n) item._notes  = n.value;
+      if (p) item._price  = p.value;
+      if (q) item._qty    = q.value;
+    });
+  }
+
   function addItem() {
-    items.push({ id: ++idSeq });
+    saveItemValues();
+    items.push({ id: ++idSeq, _deliv: 'Deliverables\n- ', _notes: 'Notes\n- ' });
     renderItems();
   }
 
   function removeItem(id) {
+    saveItemValues();
     items = items.filter(function (it) { return it.id !== id; });
     renderItems();
   }
@@ -240,9 +254,9 @@
         '<label>Header</label>' +
         '<input id="header-' + item.id + '" placeholder="e.g. Custom Woodwork">' +
         '<label>Deliverables</label>' +
-        '<textarea id="deliv-' + item.id + '" rows="3" placeholder="e.g.&#10;- 25mm Bare Plywood&#10;- CNC Cut pieces"></textarea>' +
+        '<textarea id="deliv-' + item.id + '" rows="5"></textarea>' +
         '<label>Notes</label>' +
-        '<textarea id="notes-' + item.id + '" rows="2" placeholder="e.g. Lead time: 5 working days"></textarea>' +
+        '<textarea id="notes-' + item.id + '" rows="4"></textarea>' +
         '<div class="row2" style="margin-top:10px">' +
           '<div><label>Unit price (S$)</label><input type="number" step="0.01" min="0" id="price-' + item.id + '" placeholder="0.00"></div>' +
           '<div><label>Quantity</label><input type="number" step="1" min="0" id="qty-' + item.id + '" placeholder="0"></div>' +
@@ -250,6 +264,33 @@
       '</div>';
     });
     $('itemsList').innerHTML = html;
+
+    // Restore values and attach bullet-list behaviour
+    items.forEach(function (item) {
+      var h = $('header-' + item.id), d = $('deliv-' + item.id),
+          n = $('notes-'  + item.id), p = $('price-' + item.id), q = $('qty-' + item.id);
+      if (h) h.value = item._header || '';
+      if (d) { d.value = item._deliv  != null ? item._deliv  : 'Deliverables\n- '; attachList(d); }
+      if (n) { n.value = item._notes  != null ? item._notes  : 'Notes\n- ';        attachList(n); }
+      if (p) p.value = item._price || '';
+      if (q) q.value = item._qty   || '';
+    });
+  }
+
+  function attachList(el) {
+    el.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var start     = el.selectionStart;
+      var val       = el.value;
+      var lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      var line      = val.substring(lineStart, start);
+      var insert    = (line === '- ') ? '\n' : (line.startsWith('- ') ? '\n- ' : '\n');
+      // If escaping empty dash line, remove the trailing "- "
+      var before = (line === '- ') ? val.substring(0, lineStart) : val.substring(0, start);
+      el.value = before + insert + val.substring(start);
+      el.selectionStart = el.selectionEnd = before.length + insert.length;
+    });
   }
 
   // ── LOAD ──────────────────────────────────────────────────────────────────
@@ -320,13 +361,14 @@
 
   // ── COLLECT ───────────────────────────────────────────────────────────────
   function collect() {
+    saveItemValues();
     var itemsData = items.map(function (item) {
       return {
-        header:       (($('header-' + item.id) || {}).value || '').trim(),
-        deliverables: (($('deliv-'  + item.id) || {}).value || '').trim(),
-        notes:        (($('notes-'  + item.id) || {}).value || '').trim(),
-        unitPrice:    (($('price-'  + item.id) || {}).value || '').trim(),
-        quantity:     (($('qty-'    + item.id) || {}).value || '').trim(),
+        header:       (item._header || '').trim(),
+        deliverables: (item._deliv  || '').trim(),
+        notes:        (item._notes  || '').trim(),
+        unitPrice:    (item._price  || '').trim(),
+        quantity:     (item._qty    || '').trim(),
       };
     });
     return {
