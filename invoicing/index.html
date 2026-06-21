@@ -2,64 +2,32 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>General Invoicing</title>
   <style>
     :root {
-      --bg: #f4f5f7;
-      --card: #ffffff;
-      --ink: #14181f;
-      --muted: #707885;
-      --line: #e6e9ee;
-      --line-strong: #d3d8e0;
-      --ink-soft: #3a414c;
-      --brand: #0f172a;
-      --accent: #4f46e5;
-      --accent-weak: #eef0fe;
-      --ok: #15a34a;
-      --okbg: #eefcf3;
-      --warn: #92600a;
-      --warnbg: #fef6e7;
-      --err: #b42318;
-      --errbg: #fef3f2;
+      --bg: #f4f5f7; --card: #fff; --ink: #14181f; --muted: #707885;
+      --line: #e6e9ee; --line-strong: #d3d8e0; --ink-soft: #3a414c;
+      --brand: #0f172a; --accent: #4f46e5; --accent-weak: #eef0fe;
+      --ok: #15a34a; --okbg: #eefcf3; --err: #b42318; --errbg: #fef3f2;
       --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
     }
     * { box-sizing: border-box; }
     html { -webkit-text-size-adjust: 100%; }
     body {
       margin: 0; background: var(--bg); color: var(--ink);
-      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
     .wrap { max-width: 720px; margin: 0 auto; padding: 22px 16px 110px; }
-
-    .brand { display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
+    .brand { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; }
     .mark {
       width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
       background: var(--brand); color: #fff; font-weight: 800; font-size: 17px;
-      display: grid; place-items: center; letter-spacing: -.5px;
+      display: grid; place-items: center;
     }
     .brand h1 { font-size: 18px; margin: 0; letter-spacing: -.2px; }
     .brand p  { margin: 1px 0 0; font-size: 12.5px; color: var(--muted); }
-
-    /* Settings screen */
-    #setupScreen { display: flex; flex-direction: column; gap: 14px; }
-    #setupScreen h2 { font-size: 15px; margin: 0 0 4px; }
-    #setupScreen p  { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
-
-    /* Segmented mode control */
-    .seg {
-      display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px;
-      background: #eceef2; border: 1px solid var(--line); border-radius: 12px;
-      padding: 4px; margin: 16px 0; overflow: hidden;
-    }
-    .seg button {
-      appearance: none; border: 0; background: transparent; cursor: pointer;
-      padding: 9px 6px; border-radius: 9px; font: 600 13.5px inherit; color: var(--muted);
-      white-space: nowrap; transition: background .12s, color .12s, box-shadow .12s;
-    }
-    .seg button.active { background: #fff; color: var(--ink); box-shadow: var(--shadow); }
-
     .card {
       background: var(--card); border: 1px solid var(--line); border-radius: 16px;
       padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow);
@@ -68,93 +36,89 @@
       font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em;
       color: var(--muted); margin: 0 0 14px; font-weight: 700;
     }
-
     label { display: block; font-size: 12.5px; color: var(--ink-soft); margin: 12px 0 5px; font-weight: 500; }
     label:first-of-type { margin-top: 0; }
     input, textarea, select {
       width: 100%; padding: 11px 12px; border: 1px solid var(--line-strong);
       border-radius: 10px; font: inherit; background: #fff; color: var(--ink);
-      transition: border-color .12s, box-shadow .12s;
       -webkit-appearance: none; appearance: none;
+      transition: border-color .12s, box-shadow .12s;
     }
     input::placeholder, textarea::placeholder { color: #aab1bd; }
-    input:focus, textarea:focus, select:focus {
-      outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak);
-    }
-    textarea { resize: vertical; min-height: 60px; }
-    select {
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23707885' d='M6 8 0 0h12z'/%3E%3C/svg%3E");
-      background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px;
-    }
-    .row { display: flex; gap: 12px; }
-    .row > * { flex: 1; min-width: 0; }
+    input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+    textarea { resize: vertical; min-height: 64px; }
+    .row2 { display: flex; gap: 12px; }
+    .row2 > * { flex: 1; min-width: 0; }
 
-    .item { border: 1px solid var(--line); border-radius: 13px; padding: 14px; margin-bottom: 11px; background: #fcfcfd; }
-    .item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-    .item-head .chip {
-      font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-weak);
-      padding: 2px 9px; border-radius: 99px; letter-spacing: .02em;
-    }
-    .note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+    /* Item blocks */
+    .item-block { border: 1px solid var(--line); border-radius: 13px; padding: 14px; margin-bottom: 11px; background: #fcfcfd; }
+    .item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .chip { font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-weak); padding: 3px 10px; border-radius: 99px; }
+    .btn-remove { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--muted); line-height: 1; padding: 2px 6px; }
+    .btn-remove:hover { color: var(--err); }
 
+    .btn-add {
+      width: 100%; margin-top: 4px; padding: 11px; border: 1.5px dashed var(--line-strong);
+      border-radius: 10px; background: none; font: 600 14px inherit; color: var(--muted);
+      cursor: pointer; transition: color .12s, border-color .12s;
+    }
+    .btn-add:hover { color: var(--accent); border-color: var(--accent); }
+
+    .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 12px; cursor: pointer; font-weight: 400; }
+    .toggle-label input[type=checkbox] { width: auto; -webkit-appearance: auto; appearance: auto; margin: 0; }
+
+    /* Terms toggle */
+    .terms-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .btn-icon {
+      width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line-strong);
+      background: #fff; font-size: 17px; cursor: pointer; display: grid; place-items: center;
+      flex-shrink: 0; color: var(--ink-soft);
+    }
+    .btn-icon:hover { background: var(--accent-weak); border-color: var(--accent); }
+    .terms-name { font-weight: 700; font-size: 15px; flex: 1; }
+    .terms-display { font-size: 13px; color: var(--ink-soft); white-space: pre-wrap; line-height: 1.6; background: var(--bg); border-radius: 10px; padding: 12px; }
+
+    /* Actions */
     .actions {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 9;
-      background: rgba(244,245,247,.86); backdrop-filter: blur(8px);
+      background: rgba(244,245,247,.9); backdrop-filter: blur(8px);
       border-top: 1px solid var(--line); padding: 12px 16px;
     }
     .actions-inner { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; }
-    button.btn {
-      flex: 1; padding: 13px 14px; border: 0; border-radius: 12px;
-      font: 700 15px inherit; cursor: pointer; transition: filter .12s, opacity .12s;
-    }
+    button.btn { flex: 1; padding: 13px 14px; border: 0; border-radius: 12px; font: 700 15px inherit; cursor: pointer; transition: filter .12s, opacity .12s; }
     .btn-primary { background: var(--brand); color: #fff; }
     .btn-save    { background: var(--ok);    color: #fff; }
-    .btn-danger  { background: var(--err);   color: #fff; }
     .btn:not(:disabled):hover { filter: brightness(1.07); }
     .btn:disabled { opacity: .4; cursor: not-allowed; }
 
     .banner { border-radius: 11px; padding: 11px 13px; font-size: 13px; margin-bottom: 13px; border: 1px solid transparent; }
-    .banner.warn { background: var(--warnbg); color: var(--warn); border-color: #f7e2b0; }
-    .banner.err  { background: var(--errbg);  color: var(--err);  border-color: #fcc9c2; }
-    .banner.ok   { background: var(--okbg);   color: var(--ok);   border-color: #b6ecca; }
+    .banner.ok  { background: var(--okbg);  color: var(--ok);  border-color: #b6ecca; }
+    .banner.err { background: var(--errbg); color: var(--err); border-color: #fcc9c2; }
     .hidden { display: none; }
     a.link { color: var(--accent); font-weight: 600; text-decoration: none; }
-    a.link:hover { text-decoration: underline; }
-
-    #previewCard iframe { width: 100%; height: 74vh; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; }
-
-    .spinner {
-      display: inline-block; width: 15px; height: 15px; vertical-align: -2px;
-      border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
-      animation: spin .65s linear infinite; margin-right: 6px;
-    }
+    #previewFrame { width: 100%; height: 74vh; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; }
+    .spinner { display: inline-block; width: 15px; height: 15px; vertical-align: -2px; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%; animation: spin .65s linear infinite; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
-
+    .num-loading { color: var(--muted); font-style: italic; }
   </style>
 </head>
 <body>
+<div class="wrap">
 
-<!-- MAIN APP -->
-<div id="appScreen" class="wrap hidden">
-  <div>
-    <div class="brand">
-      <div class="mark">i</div>
-      <div><h1>General Invoicing</h1><p>Fill in the details, preview, then save to Drive.</p></div>
-    </div>
+  <div class="brand">
+    <div class="mark">i</div>
+    <div><h1>General Invoicing</h1><p>Fill in the details, preview, then save to Drive.</p></div>
   </div>
 
-  <div id="seg" class="seg"></div>
+  <div id="errBanner" class="banner err hidden"></div>
 
-  <div id="warnBanner" class="banner warn hidden"></div>
-  <div id="errBanner"  class="banner err  hidden"></div>
-
+  <!-- Document -->
   <div class="card">
-    <h2 id="docHeading">Document</h2>
-    <div class="row">
+    <h2>Document</h2>
+    <div class="row2">
       <div>
-        <label id="numberLabel">Number</label>
-        <input id="number" placeholder="1239B">
+        <label>Invoice number</label>
+        <input id="number" placeholder="Loading…">
       </div>
       <div>
         <label>Date of issue</label>
@@ -163,45 +127,55 @@
     </div>
   </div>
 
+  <!-- Billed to -->
   <div class="card">
-    <h2 id="partyHeading">Billed to</h2>
+    <h2>Billed to</h2>
     <label>Customer name</label>
     <input id="customerName" placeholder="e.g. Ean Cheong">
     <label>Contact number</label>
     <input id="contactNumber" placeholder="e.g. 83687499">
     <label>Company</label>
     <input id="company" placeholder="e.g. Lele Bakery SG LLP">
-    <label>Address line 1</label>
+    <label>Address line 1 (block, street, unit)</label>
     <input id="addressLine1" placeholder="e.g. 163 Ang Mo Kio Ave 4, #01-448">
     <label>Address line 2 (postal code)</label>
     <input id="addressLine2" placeholder="e.g. Singapore 560163">
   </div>
 
+  <!-- Items -->
   <div class="card">
     <h2>Items</h2>
-    <label>Job / category header <span style="color:var(--muted);font-weight:400">(row 16)</span></label>
+    <label>Job / category header</label>
     <input id="jobHeader" placeholder="e.g. Custom Wood, Acrylic + CNC Cut">
-    <div id="items" style="margin-top:14px"></div>
-    <p class="note">Up to 3 line items (rows 17–19). Leave an item blank to skip it.</p>
+    <div id="itemsList" style="margin-top:14px"></div>
+    <button class="btn-add" onclick="addItem()">+ Add item</button>
+    <label class="toggle-label">
+      <input type="checkbox" id="showItemLabels" checked>
+      Show item label rows in sheet
+    </label>
   </div>
 
+  <!-- Payment terms -->
   <div class="card">
-    <h2 id="termsHeading">Terms &amp; conditions</h2>
-    <label>Preset</label>
-    <select id="termsPreset"></select>
-    <label style="margin-top:12px">Text (editable)</label>
-    <textarea id="termsText" rows="3"></textarea>
+    <h2>Payment Terms</h2>
+    <div class="terms-nav">
+      <button class="btn-icon" onclick="cycleTerm(-1)">&#8592;</button>
+      <span id="termsName" class="terms-name"></span>
+      <button class="btn-icon" onclick="cycleTerm(1)">&#8594;</button>
+    </div>
+    <div id="termsDisplay" class="terms-display"></div>
   </div>
 
+  <!-- Preview -->
   <div id="previewCard" class="card hidden">
     <h2>Preview</h2>
     <div id="saveResult" class="banner ok hidden"></div>
     <iframe id="previewFrame" title="Document preview"></iframe>
   </div>
+
 </div>
 
-<!-- ACTION BAR (shown when main app is visible) -->
-<div id="actionBar" class="actions hidden">
+<div class="actions">
   <div class="actions-inner">
     <button id="btnPreview" class="btn btn-primary">Generate preview</button>
     <button id="btnSave"    class="btn btn-save" disabled>Save to Drive</button>
@@ -211,138 +185,101 @@
 <script>
   var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyO1-FJQTZ4qcLjOIVv4PmBYy66ThCsA4v2xPGieDCSqk5j7PO75qQEbk-dvnqJeUsn/exec';
   var TOKEN      = '446924';
-  var MODES = {}, MODE_ORDER = [], CURRENT = 'invoice';
-  var numberEdited = false, previewBlobUrl = null;
 
-  var $ = function (id) { return document.getElementById(id); };
+  // ── TERMS ─────────────────────────────────────────────────────────────────
+  var TERMS = [
+    {
+      name: 'Full payment',
+      text: '- Full payment to be made before project commencement\n- Additional costs may be incurred if changes are requested after design freeze',
+    },
+    {
+      name: '70% upfront',
+      text: '- 70% upfront to be made before project commencement\n- Additional costs may be incurred if changes are requested after design freeze',
+    },
+  ];
+  var termIdx = 0;
 
-  // ── BOOT ──────────────────────────────────────────────────────────────────
+  function cycleTerm(dir) {
+    termIdx = (termIdx + dir + TERMS.length) % TERMS.length;
+    renderTerms();
+  }
+  function renderTerms() {
+    $('termsName').textContent    = TERMS[termIdx].name;
+    $('termsDisplay').textContent = TERMS[termIdx].text;
+  }
+
+  // ── ITEMS ─────────────────────────────────────────────────────────────────
+  var items = [], idSeq = 0;
+
+  function addItem() {
+    items.push({ id: ++idSeq });
+    renderItems();
+  }
+
+  function removeItem(id) {
+    items = items.filter(function (it) { return it.id !== id; });
+    renderItems();
+  }
+
+  function renderItems() {
+    var html = '';
+    items.forEach(function (item, i) {
+      var n = i + 1;
+      html += '<div class="item-block">' +
+        '<div class="item-head">' +
+          '<span class="chip">Item ' + n + '</span>' +
+          (items.length > 1 ? '<button class="btn-remove" onclick="removeItem(' + item.id + ')">&#10005;</button>' : '') +
+        '</div>' +
+        '<label>Description</label>' +
+        '<textarea id="desc-' + item.id + '" rows="3" placeholder="e.g. 25mm Bare Plywood&#10;Deliverables:&#10;- ..."></textarea>' +
+        '<div class="row2" style="margin-top:10px">' +
+          '<div><label>Unit price (S$)</label><input type="number" step="0.01" min="0" id="price-' + item.id + '" placeholder="0.00"></div>' +
+          '<div><label>Quantity</label><input type="number" step="1" min="0" id="qty-' + item.id + '" placeholder="0"></div>' +
+        '</div>' +
+      '</div>';
+    });
+    $('itemsList').innerHTML = html;
+  }
+
+  // ── LOAD ──────────────────────────────────────────────────────────────────
+  var numberEdited = false;
 
   function boot() {
-    $('appScreen').classList.remove('hidden');
-    $('actionBar').classList.remove('hidden');
-    loadInitialData();
-  }
+    // Set today immediately — no API call needed
+    var now  = new Date();
+    var yyyy = now.getFullYear();
+    var mm   = String(now.getMonth() + 1).padStart(2, '0');
+    var dd   = String(now.getDate()).padStart(2, '0');
+    $('dateOfIssue').value = yyyy + '-' + mm + '-' + dd;
 
-  // ── DATA LOAD ─────────────────────────────────────────────────────────────
+    // Restore cached next number instantly
+    var cached = localStorage.getItem('gi_nextNum');
+    if (cached && !numberEdited) $('number').value = cached + 'B';
 
-  function loadInitialData() {
-    apiGet('getInitialData')
-      .then(function (cfg) {
-        if (cfg.error) { banner('errBanner', cfg.error); return; }
-        MODES           = cfg.modes;
-        MODE_ORDER      = cfg.modeOrder;
-        window._nextNum = cfg.nextNumberRaw;
-        $('dateOfIssue').value = cfg.today || '';
-        buildSegments();
-        selectMode(MODE_ORDER[0]);
-        if (cfg.warning) banner('warnBanner', cfg.warning);
+    // Start with 1 item
+    addItem();
+    renderTerms();
+
+    // Fetch fresh next number in background
+    apiGet('getNextNumber')
+      .then(function (res) {
+        if (res.nextNumberRaw && !numberEdited) {
+          $('number').value = res.nextNumberRaw + 'B';
+          localStorage.setItem('gi_nextNum', res.nextNumberRaw);
+        }
       })
-      .catch(function (err) { banner('errBanner', 'Failed to load: ' + err.message); });
-  }
-
-  // ── SEGMENTS ──────────────────────────────────────────────────────────────
-
-  function buildSegments() {
-    var html = '';
-    MODE_ORDER.forEach(function (k) {
-      html += '<button data-mode="' + k + '">' + MODES[k].label + '</button>';
-    });
-    $('seg').innerHTML = html;
-    Array.prototype.forEach.call($('seg').children, function (b) {
-      b.addEventListener('click', function () { selectMode(b.getAttribute('data-mode')); });
-    });
-  }
-
-  function selectMode(key) {
-    CURRENT = key;
-    var m = MODES[key];
-
-    Array.prototype.forEach.call($('seg').children, function (b) {
-      b.classList.toggle('active', b.getAttribute('data-mode') === key);
-    });
-
-    $('docHeading').textContent   = m.label;
-    $('numberLabel').textContent  = m.label + ' number';
-    $('partyHeading').textContent = m.partyLabel;
-    $('termsHeading').textContent = m.termsLabel;
-
-    if (!numberEdited) {
-      $('number').value = m.numberPrefix + (window._nextNum || '') + m.numberSuffix;
-    }
-
-    var sel = $('termsPreset');
-    sel.innerHTML = '';
-    Object.keys(m.terms).forEach(function (name) {
-      var o = document.createElement('option');
-      o.value = name; o.textContent = name;
-      sel.appendChild(o);
-    });
-    var first = Object.keys(m.terms)[0];
-    $('termsText').value = first ? m.terms[first] : '';
-
-    buildItems(m);
-    hide('previewCard');
-    $('btnSave').disabled = true;
+      .catch(function () {}); // silent — cached value is fine
   }
 
   $('number').addEventListener('input', function () { numberEdited = true; });
-  $('termsPreset').addEventListener('change', function () {
-    $('termsText').value = MODES[CURRENT].terms[this.value] || '';
-  });
-
-  function buildItems(m) {
-    var html = '';
-    for (var i = 0; i < 3; i++) {
-      html += '<div class="item">' +
-        '<div class="item-head"><span class="chip">Item ' + (i + 1) + '</span></div>' +
-        '<label>Description</label>' +
-        '<textarea id="desc' + i + '" placeholder="e.g. 25mm Bare Plywood&#10;Deliverables:&#10;- ..."></textarea>' +
-        '<div class="row" style="margin-top:8px">';
-      m.itemFields.forEach(function (f) {
-        var attrs = f.type === 'number'
-          ? 'type="number" step="0.01" min="0" placeholder="0"'
-          : 'type="text"';
-        html += '<div><label>' + f.label + '</label>' +
-                '<input id="f_' + i + '_' + f.key + '" ' + attrs + '></div>';
-      });
-      html += '</div></div>';
-    }
-    $('items').innerHTML = html;
-  }
-
-  // ── COLLECT FORM DATA ─────────────────────────────────────────────────────
-
-  function collect() {
-    var m = MODES[CURRENT], items = [];
-    for (var i = 0; i < 3; i++) {
-      var it = { description: val('desc' + i) };
-      m.itemFields.forEach(function (f) { it[f.key] = val('f_' + i + '_' + f.key); });
-      items.push(it);
-    }
-    return {
-      mode:          CURRENT,
-      number:        val('number'),
-      dateOfIssue:   val('dateOfIssue'),
-      customerName:  val('customerName'),
-      contactNumber: val('contactNumber'),
-      company:       val('company'),
-      addressLine1:  val('addressLine1'),
-      addressLine2:  val('addressLine2'),
-      jobHeader:     val('jobHeader'),
-      items:         items,
-      termsText:     $('termsText').value,
-    };
-  }
-
-  function val(id) { var el = $(id); return el ? (el.value || '').trim() : ''; }
 
   // ── PREVIEW ───────────────────────────────────────────────────────────────
+  var previewBlobUrl = null;
 
   $('btnPreview').addEventListener('click', function () {
     hide('errBanner');
     var data = collect();
-    if (!data.number)       return banner('errBanner', 'Number is required.');
+    if (!data.number)       return banner('errBanner', 'Invoice number is required.');
     if (!data.customerName) return banner('errBanner', 'Customer name is required.');
 
     loading('btnPreview', true, 'Generating…');
@@ -363,7 +300,6 @@
   });
 
   // ── SAVE ──────────────────────────────────────────────────────────────────
-
   $('btnSave').addEventListener('click', function () {
     hide('errBanner');
     loading('btnSave', true, 'Saving…');
@@ -373,9 +309,14 @@
         loading('btnSave', false, 'Save to Drive');
         if (res.error) { banner('errBanner', res.error); return; }
         var el = $('saveResult');
-        el.innerHTML = 'Saved <b>' + res.fileName + '</b> to <b>' + res.folder + '</b> &nbsp;·&nbsp; ' +
-                       '<a class="link" target="_blank" href="' + res.url + '">Open in Drive →</a>';
+        el.innerHTML = 'Saved <b>' + res.fileName + '</b> to <b>' + res.folder +
+          '</b> &nbsp;&middot;&nbsp; <a class="link" target="_blank" href="' + res.url + '">Open in Drive &rarr;</a>';
         el.classList.remove('hidden');
+        // Update cached number
+        if (res.nextNumberRaw) {
+          localStorage.setItem('gi_nextNum', res.nextNumberRaw);
+          if (!numberEdited) $('number').value = res.nextNumberRaw + 'B';
+        }
       })
       .catch(function (err) {
         loading('btnSave', false, 'Save to Drive');
@@ -383,8 +324,31 @@
       });
   });
 
-  // ── API HELPERS ───────────────────────────────────────────────────────────
+  // ── COLLECT ───────────────────────────────────────────────────────────────
+  function collect() {
+    var itemsData = items.map(function (item) {
+      return {
+        description: (($('desc-'  + item.id) || {}).value || '').trim(),
+        unitPrice:   (($('price-' + item.id) || {}).value || '').trim(),
+        quantity:    (($('qty-'   + item.id) || {}).value || '').trim(),
+      };
+    });
+    return {
+      number:         val('number'),
+      dateOfIssue:    val('dateOfIssue'),
+      customerName:   val('customerName'),
+      contactNumber:  val('contactNumber'),
+      company:        val('company'),
+      addressLine1:   val('addressLine1'),
+      addressLine2:   val('addressLine2'),
+      jobHeader:      val('jobHeader'),
+      items:          itemsData,
+      termsText:      TERMS[termIdx].text,
+      showItemLabels: $('showItemLabels').checked,
+    };
+  }
 
+  // ── API ───────────────────────────────────────────────────────────────────
   function apiGet(action) {
     var url = SCRIPT_URL + '?action=' + action + '&token=' + encodeURIComponent(TOKEN);
     return fetch(url, { redirect: 'follow' }).then(function (r) { return r.json(); });
@@ -392,15 +356,13 @@
 
   function apiPost(action, data) {
     return fetch(SCRIPT_URL, {
-      method: 'POST',
-      redirect: 'follow',
+      method: 'POST', redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ token: TOKEN, action: action, data: data }),
     }).then(function (r) { return r.json(); });
   }
 
-  // ── RENDER PDF ────────────────────────────────────────────────────────────
-
+  // ── PDF ───────────────────────────────────────────────────────────────────
   function renderPdf(b64) {
     var bytes = atob(b64), arr = new Uint8Array(bytes.length);
     for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
@@ -412,16 +374,15 @@
     $('previewCard').scrollIntoView({ behavior: 'smooth' });
   }
 
-  // ── UI HELPERS ────────────────────────────────────────────────────────────
-
+  // ── HELPERS ───────────────────────────────────────────────────────────────
+  function $ (id)  { return document.getElementById(id); }
+  function val(id) { var el = $(id); return el ? (el.value || '').trim() : ''; }
   function banner(id, msg)  { var el = $(id); el.textContent = msg; el.classList.remove('hidden'); }
   function hide(id)         { $(id).classList.add('hidden'); }
   function loading(btnId, on, label) {
     var b = $(btnId); b.disabled = on;
     b.innerHTML = on ? '<span class="spinner"></span>' + label : label;
   }
-
-  // ── INIT ──────────────────────────────────────────────────────────────────
 
   boot();
 </script>
