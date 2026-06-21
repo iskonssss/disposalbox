@@ -68,14 +68,13 @@
     .toggle-label input[type=checkbox] { width: auto; -webkit-appearance: auto; appearance: auto; margin: 0; }
 
     /* Terms toggle */
-    .terms-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .btn-icon {
-      width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line-strong);
-      background: #fff; font-size: 17px; cursor: pointer; display: grid; place-items: center;
-      flex-shrink: 0; color: var(--ink-soft);
+    .terms-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+    .terms-btn {
+      flex: 1; padding: 11px 8px; border: 1.5px solid var(--line-strong);
+      border-radius: 10px; background: #fff; font: 600 14px inherit; color: var(--muted);
+      cursor: pointer; transition: background .12s, color .12s, border-color .12s;
     }
-    .btn-icon:hover { background: var(--accent-weak); border-color: var(--accent); }
-    .terms-name { font-weight: 700; font-size: 15px; flex: 1; }
+    .terms-btn.active { background: var(--brand); color: #fff; border-color: var(--brand); }
     .terms-display { font-size: 13px; color: var(--ink-soft); white-space: pre-wrap; line-height: 1.6; background: var(--bg); border-radius: 10px; padding: 12px; }
 
     /* Actions */
@@ -158,11 +157,7 @@
   <!-- Payment terms -->
   <div class="card">
     <h2>Payment Terms</h2>
-    <div class="terms-nav">
-      <button class="btn-icon" onclick="cycleTerm(-1)">&#8592;</button>
-      <span id="termsName" class="terms-name"></span>
-      <button class="btn-icon" onclick="cycleTerm(1)">&#8594;</button>
-    </div>
+    <div class="terms-btns" id="termsBtns"></div>
     <div id="termsDisplay" class="terms-display"></div>
   </div>
 
@@ -199,12 +194,17 @@
   ];
   var termIdx = 0;
 
-  function cycleTerm(dir) {
-    termIdx = (termIdx + dir + TERMS.length) % TERMS.length;
+  function selectTerm(idx) {
+    termIdx = idx;
     renderTerms();
   }
   function renderTerms() {
-    $('termsName').textContent    = TERMS[termIdx].name;
+    var html = '';
+    TERMS.forEach(function (t, i) {
+      html += '<button class="terms-btn' + (i === termIdx ? ' active' : '') +
+              '" onclick="selectTerm(' + i + ')">' + t.name + '</button>';
+    });
+    $('termsBtns').innerHTML = html;
     $('termsDisplay').textContent = TERMS[termIdx].text;
   }
 
