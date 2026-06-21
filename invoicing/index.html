@@ -93,7 +93,7 @@
     .banner { border-radius: 11px; padding: 11px 13px; font-size: 13px; margin-bottom: 13px; border: 1px solid transparent; }
     .banner.ok  { background: var(--okbg);  color: var(--ok);  border-color: #b6ecca; }
     .banner.err { background: var(--errbg); color: var(--err); border-color: #fcc9c2; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     a.link { color: var(--accent); font-weight: 600; text-decoration: none; }
     .preview-scaler { width: 100%; overflow: hidden; position: relative; }
     #previewFrame { display: block; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; }
@@ -169,6 +169,10 @@
     <div class="preview-scaler" id="previewScaler">
       <iframe id="previewFrame" title="Document preview"></iframe>
     </div>
+    <a id="pdfFallback" class="hidden" href="#" target="_blank"
+       style="display:block;text-align:center;margin-top:12px;font-size:14px;font-weight:600;color:var(--accent);padding:12px;border:1.5px solid var(--accent);border-radius:10px;text-decoration:none;">
+      Tap to open PDF &rarr;
+    </a>
   </div>
 
 </div>
@@ -362,11 +366,15 @@
     if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
     previewBlobUrl = URL.createObjectURL(blob);
 
+    // Unhide first so offsetWidth is measurable
+    $('previewCard').classList.remove('hidden');
+
     var frame   = $('previewFrame');
     var scaler  = $('previewScaler');
-    var natW    = 800;                        // PDF natural render width (px)
-    var natH    = Math.round(natW * 1.414);   // A4 ratio
-    var scale   = scaler.offsetWidth / natW;
+    var natW    = 800;
+    var natH    = Math.round(natW * 1.414);
+    var avail   = scaler.offsetWidth || (window.innerWidth - 32);
+    var scale   = avail / natW;
 
     frame.style.width           = natW + 'px';
     frame.style.height          = natH + 'px';
@@ -376,7 +384,12 @@
     scaler.style.height         = Math.round(natH * scale) + 'px';
 
     frame.src = previewBlobUrl;
-    $('previewCard').classList.remove('hidden');
+
+    // Fallback link for browsers that don't render PDFs in iframes (e.g. some iOS)
+    var link = $('pdfFallback');
+    link.href = previewBlobUrl;
+    link.classList.remove('hidden');
+
     $('previewCard').scrollIntoView({ behavior: 'smooth' });
   }
 
