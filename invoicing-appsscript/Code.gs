@@ -87,9 +87,12 @@ function saveDocument_(data) {
 
   const file = folder.createFile(blob);
 
-  // Return next number so frontend can update cache
+  // Refresh cache and return next number
   let nextNum = null;
-  try { nextNum = getNextInvoiceNumber_(); } catch (_) {}
+  try {
+    nextNum = getNextInvoiceNumber_();
+    PropertiesService.getScriptProperties().setProperty('NEXT_NUM_CACHE', String(nextNum));
+  } catch (_) {}
 
   return { fileName: file.getName(), url: file.getUrl(), folder: folder.getName(), nextNumberRaw: nextNum };
 }
@@ -134,7 +137,7 @@ function writeToSheet_(data) {
 
   // ── Auto-generate invoice number if blank ────────────────────────────────
 
-  const invoiceNum = (data.number || '').trim() || (getNextInvoiceNumber_() + 'B');
+  const invoiceNum = (data.number || '').trim() || (cachedNextNumber_() + 'B');
 
   // ── Write header fields ───────────────────────────────────────────────────
 
@@ -229,6 +232,15 @@ function parseDocDate_(s) {
 }
 
 // ── NUMBER SERIES ─────────────────────────────────────────────────────────────
+
+function cachedNextNumber_() {
+  const props  = PropertiesService.getScriptProperties();
+  const cached = parseInt(props.getProperty('NEXT_NUM_CACHE') || '0', 10);
+  if (cached > 0) return cached;
+  const num = getNextInvoiceNumber_();
+  props.setProperty('NEXT_NUM_CACHE', String(num));
+  return num;
+}
 
 function getNextInvoiceNumber_() {
   const root = DriveApp.getFolderById(INVOICES_FOLDER_ID);

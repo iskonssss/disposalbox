@@ -232,7 +232,7 @@
 
   function addItem() {
     saveItemValues();
-    items.push({ id: ++idSeq, _deliv: 'Deliverables\n- ', _notes: 'Notes\n- ' });
+    items.push({ id: ++idSeq, _deliv: 'Deliverable(s):\n- ', _notes: 'Notes:\n- ' });
     renderItems();
   }
 
@@ -270,8 +270,8 @@
       var h = $('header-' + item.id), d = $('deliv-' + item.id),
           n = $('notes-'  + item.id), p = $('price-' + item.id), q = $('qty-' + item.id);
       if (h) h.value = item._header || '';
-      if (d) { d.value = item._deliv  != null ? item._deliv  : 'Deliverables\n- '; attachList(d); }
-      if (n) { n.value = item._notes  != null ? item._notes  : 'Notes\n- ';        attachList(n); }
+      if (d) { d.value = item._deliv  != null ? item._deliv  : 'Deliverable(s):\n- '; attachList(d); }
+      if (n) { n.value = item._notes  != null ? item._notes  : 'Notes:\n- ';          attachList(n); }
       if (p) p.value = item._price || '';
       if (q) q.value = item._qty   || '';
     });
