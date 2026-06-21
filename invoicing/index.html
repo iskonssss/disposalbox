@@ -117,7 +117,7 @@
     <div class="row2">
       <div>
         <label>Invoice number</label>
-        <input id="number" placeholder="Loading…">
+        <input id="number" placeholder="Auto on save">
       </div>
       <div>
         <label>Date of issue</label>
@@ -130,11 +130,11 @@
   <div class="card">
     <h2>Billed to</h2>
     <label>Customer name</label>
-    <input id="customerName" placeholder="e.g. Ean Cheong">
+    <input id="customerName" placeholder="e.g. Michelle Tan">
     <label>Contact number</label>
-    <input id="contactNumber" placeholder="e.g. 83687499">
+    <input id="contactNumber" placeholder="e.g. 93840284">
     <label>Company</label>
-    <input id="company" placeholder="e.g. Lele Bakery SG LLP">
+    <input id="company" placeholder="e.g. Havita Studios Pte Ltd">
     <label>Address line 1 (block, street, unit)</label>
     <input id="addressLine1" placeholder="e.g. 163 Ang Mo Kio Ave 4, #01-448">
     <label>Address line 2 (postal code)</label>
@@ -252,26 +252,10 @@
     var dd   = String(now.getDate()).padStart(2, '0');
     $('dateOfIssue').value = yyyy + '-' + mm + '-' + dd;
 
-    // Restore cached next number instantly
-    var cached = localStorage.getItem('gi_nextNum');
-    if (cached && !numberEdited) $('number').value = cached + 'B';
-
     // Start with 1 item
     addItem();
     renderTerms();
-
-    // Fetch fresh next number in background
-    apiGet('getNextNumber')
-      .then(function (res) {
-        if (res.nextNumberRaw && !numberEdited) {
-          $('number').value = res.nextNumberRaw + 'B';
-          localStorage.setItem('gi_nextNum', res.nextNumberRaw);
-        }
-      })
-      .catch(function () {}); // silent — cached value is fine
   }
-
-  $('number').addEventListener('input', function () { numberEdited = true; });
 
   // ── PREVIEW ───────────────────────────────────────────────────────────────
   var previewBlobUrl = null;
@@ -279,7 +263,6 @@
   $('btnPreview').addEventListener('click', function () {
     hide('errBanner');
     var data = collect();
-    if (!data.number)       return banner('errBanner', 'Invoice number is required.');
     if (!data.customerName) return banner('errBanner', 'Customer name is required.');
 
     loading('btnPreview', true, 'Generating…');

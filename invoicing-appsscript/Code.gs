@@ -71,14 +71,14 @@ function checkToken_(token) {
 // ── DOCUMENTS API ─────────────────────────────────────────────────────────────
 
 function previewDocument_(data) {
-  const { sheet, printRows } = writeToSheet_(data);
+  const { sheet, printRows, invoiceNum } = writeToSheet_(data);
   const blob = exportPdf_(sheet, 'A1:I' + printRows);
-  return { pdfBase64: Utilities.base64Encode(blob.getBytes()) };
+  return { pdfBase64: Utilities.base64Encode(blob.getBytes()), invoiceNum };
 }
 
 function saveDocument_(data) {
-  const { sheet, printRows } = writeToSheet_(data);
-  const filename = buildFileName_(data);
+  const { sheet, printRows, invoiceNum } = writeToSheet_(data);
+  const filename = buildFileName_(data, invoiceNum);
   const blob     = exportPdf_(sheet, 'A1:I' + printRows).setName(filename);
   const folder   = getMonthFolder_(parseDocDate_(data.dateOfIssue));
 
@@ -132,9 +132,13 @@ function writeToSheet_(data) {
   const termsRow = BASE_TERMS_ROW + (newCount - BASE_ITEM_COUNT) * ROWS_PER_ITEM;
   const printRows = BASE_PRINT_ROWS + (newCount - BASE_ITEM_COUNT) * ROWS_PER_ITEM;
 
+  // ── Auto-generate invoice number if blank ────────────────────────────────
+
+  const invoiceNum = (data.number || '').trim() || (getNextInvoiceNumber_() + 'B');
+
   // ── Write header fields ───────────────────────────────────────────────────
 
-  sheet.getRange(CELLS.number).setValue(data.number || '');
+  sheet.getRange(CELLS.number).setValue(invoiceNum);
   sheet.getRange(CELLS.dateOfIssue).setValue(parseDocDate_(data.dateOfIssue)).setNumberFormat('dd/MM/yyyy');
   sheet.getRange(CELLS.customerName).setValue(data.customerName || '');
   sheet.getRange(CELLS.contactNumber).setValue(data.contactNumber || '');
@@ -178,7 +182,7 @@ function writeToSheet_(data) {
   if (data.termsText != null) sheet.getRange('A' + termsRow).setValue(data.termsText);
 
   SpreadsheetApp.flush();
-  return { sheet, printRows, termsRow };
+  return { sheet, printRows, termsRow, invoiceNum };
 }
 
 // ── PDF EXPORT ────────────────────────────────────────────────────────────────
@@ -205,8 +209,8 @@ function exportPdf_(sheet, printRange) {
   return resp.getBlob();
 }
 
-function buildFileName_(data) {
-  return (data.number || 'Invoice') + ' Invoice - ' + (data.customerName || 'Customer').trim() + '.pdf';
+function buildFileName_(data, invoiceNum) {
+  return (invoiceNum || data.number || 'Invoice') + ' Invoice - ' + (data.customerName || 'Customer').trim() + '.pdf';
 }
 
 function parseDocDate_(s) {
