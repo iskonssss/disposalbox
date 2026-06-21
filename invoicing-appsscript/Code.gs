@@ -100,7 +100,7 @@ function writeToSheet_(data) {
   const sheet = SpreadsheetApp.openById(INVOICE_SS_ID).getSheetByName(INVOICE_TAB);
   if (!sheet) throw new Error('Tab not found: "' + INVOICE_TAB + '"');
 
-  const items    = (data.items || []).filter(function (i) { return i.description || i.unitPrice || i.quantity; });
+  const items    = (data.items || []).filter(function (i) { return i.header || i.deliverables || i.notes || i.unitPrice || i.quantity; });
   const newCount = Math.max(items.length, 1);
 
   // ── Adjust item rows ──────────────────────────────────────────────────────
@@ -160,19 +160,27 @@ function writeToSheet_(data) {
 
     const item = items[i] || {};
 
-    // Label row: show/hide and write item number
-    if (showLabels) {
+    const notesRow = base + 2;
+
+    // Header row (row 1 of block) — show/hide based on toggle
+    if (showLabels && item.header) {
       sheet.showRows(base);
-      sheet.getRange('B' + base).setValue('Item ' + (i + 1));
+      sheet.getRange('B' + base).setValue(item.header);
+    } else if (showLabels) {
+      sheet.showRows(base);
+      sheet.getRange('B' + base).setValue('');
     } else {
       sheet.getRange('B' + base).setValue('');
       sheet.hideRows(base);
     }
 
-    // Description row
-    if (item.description) sheet.getRange('B' + descRow).setValue(item.description);
+    // Deliverables row (row 2 of block)
+    if (item.deliverables) sheet.getRange('B' + descRow).setValue(item.deliverables);
 
-    // Unit price (G) and Quantity (H) on the label row — merged vertically across 3 rows
+    // Notes row (row 3 of block)
+    if (item.notes) sheet.getRange('B' + notesRow).setValue(item.notes);
+
+    // Unit price (G) and Quantity (H) — merged vertically across the 3 rows
     if (item.unitPrice) sheet.getRange('G' + base).setValue(Number(item.unitPrice));
     if (item.quantity)  sheet.getRange('H' + base).setValue(Number(item.quantity));
   }
