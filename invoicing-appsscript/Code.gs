@@ -194,6 +194,13 @@ function writeToSheet_(data) {
     if (item.quantity)  sheet.getRange('H' + base).setValue(Number(item.quantity));
   }
 
+  // ── Update Total Payable SUM formula ─────────────────────────────────────
+
+  const totalRow = FIRST_ITEM_ROW + newCount * ROWS_PER_ITEM;  // I20 with 1 item, I23 with 2, etc.
+  sheet.getRange('I' + totalRow).setFormula(
+    '=SUM(I' + FIRST_ITEM_ROW + ':I' + (totalRow - 1) + ')'
+  );
+
   // ── Write terms ───────────────────────────────────────────────────────────
 
   if (data.termsText != null) sheet.getRange('A' + termsRow).setValue(data.termsText);
