@@ -59,8 +59,8 @@
     .item-block { border: 1px solid var(--line); border-radius: 13px; padding: 14px; margin-bottom: 11px; background: #fcfcfd; }
     .item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .chip { font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-weak); padding: 3px 10px; border-radius: 99px; }
-    .btn-remove { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--muted); line-height: 1; padding: 2px 6px; }
-    .btn-remove:hover { color: var(--err); }
+    .btn-remove { background: none; border: 1.5px solid #fcc9c2; color: var(--err); border-radius: 9px; font: 600 13px inherit; cursor: pointer; padding: 8px 14px; margin-top: 12px; width: 100%; }
+    .btn-remove:hover { background: var(--errbg); }
 
     .btn-add {
       width: 100%; margin-top: 4px; padding: 11px; border: 1.5px dashed var(--line-strong);
@@ -257,7 +257,6 @@
       html += '<div class="item-block">' +
         '<div class="item-head">' +
           '<span class="chip">Item ' + n + '</span>' +
-          (items.length > 1 ? '<button class="btn-remove" onclick="removeItem(' + item.id + ')">&#10005;</button>' : '') +
         '</div>' +
         '<label>Header</label>' +
         '<input id="header-' + item.id + '" placeholder="e.g. Custom Woodwork">' +
@@ -269,6 +268,7 @@
           '<div><label>Unit price (S$)</label><input type="number" step="0.01" min="0" id="price-' + item.id + '" placeholder="0.00"></div>' +
           '<div><label>Quantity</label><input type="number" step="1" min="0" id="qty-' + item.id + '" placeholder="0"></div>' +
         '</div>' +
+        (items.length > 1 ? '<button class="btn-remove" onclick="removeItem(' + item.id + ')">Remove item</button>' : '') +
       '</div>';
     });
     $('itemsList').innerHTML = html;
