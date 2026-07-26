@@ -107,6 +107,10 @@ function normalizeSheetTime(val) {
 
 // ── Calendar sync ─────────────────────────────────────────────────────────────
 
+// Cap deletions per run so a large backlog of stale/duplicate events clears
+// gradually without tripping Calendar's rate limits again.
+const MAX_DELETES_PER_RUN = 50;
+
 function syncAllToCalendar() {
   const ss  = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET);
   const raw = ss.getDataRange().getValues();
@@ -119,7 +123,11 @@ function syncAllToCalendar() {
   const idxTime  = headers.indexOf('time');
   const idxType  = headers.indexOf('boxtype');
 
-  // Build deadline map: deadlineISO → array of ALL confirmed bookings for that deadline
+  const todayISO = Utilities.formatDate(new Date(), 'Asia/Singapore', 'yyyy-MM-dd');
+
+  // Build deadline map: deadlineISO → array of ALL confirmed bookings for that deadline.
+  // Past deadlines are skipped — their events would otherwise age out of the fetch
+  // window below and get re-created as duplicates on every run.
   const deadlineMap = {};
   raw.slice(1).forEach(r => {
     if (!r[0]) return;
@@ -127,6 +135,7 @@ function syncAllToCalendar() {
 
     const cremationISO = toDateISO(r[idxDate]);
     const deadlineISO  = getDeadlineISO(cremationISO);
+    if (deadlineISO < todayISO) return;
 
     if (!deadlineMap[deadlineISO]) deadlineMap[deadlineISO] = [];
     deadlineMap[deadlineISO].push({
@@ -137,19 +146,24 @@ function syncAllToCalendar() {
     });
   });
 
-  // Fetch existing Cadaver Box events (1 month back → 13 months ahead)
+  // Fetch existing Cadaver Box events (4 months back → 13 months ahead).
+  // The wide back-range lets stale/duplicate events from past runs get cleaned up.
   const cal        = CalendarApp.getDefaultCalendar();
-  const rangeStart = new Date(); rangeStart.setMonth(rangeStart.getMonth() - 1);
+  const rangeStart = new Date(); rangeStart.setMonth(rangeStart.getMonth() - 4);
   const rangeEnd   = new Date(); rangeEnd.setMonth(rangeEnd.getMonth() + 13);
 
-  // Key existing events by "deadlineISO_hour" so we can match them precisely
+  // Key existing events by "deadlineISO_hour" so we can match them precisely.
+  // Extra events sharing a key are duplicates — queue them for deletion.
   const existingByKey = {};
+  const deleteList    = [];
   cal.getEvents(rangeStart, rangeEnd)
     .filter(e => e.getTitle().includes('Cadaver Box'))
     .forEach(e => {
       const dateKey = toDateISO(e.getStartTime());
       const sgtHour = (e.getStartTime().getUTCHours() + 8) % 24;
-      existingByKey[`${dateKey}_${sgtHour}`] = e;
+      const key     = `${dateKey}_${sgtHour}`;
+      if (existingByKey[key]) deleteList.push(e);
+      else existingByKey[key] = e;
     });
 
   const usedKeys = new Set();
@@ -187,10 +201,16 @@ function syncAllToCalendar() {
     });
   });
 
-  // Delete only events that no longer have a matching booking
+  // Queue events that no longer have a matching booking
   Object.entries(existingByKey).forEach(([key, ev]) => {
-    if (!usedKeys.has(key)) ev.deleteEvent();
+    if (!usedKeys.has(key)) deleteList.push(ev);
   });
+
+  // Delete a capped batch; the remainder clears on subsequent runs
+  deleteList.slice(0, MAX_DELETES_PER_RUN).forEach(ev => ev.deleteEvent());
+  if (deleteList.length > MAX_DELETES_PER_RUN) {
+    console.log(`Deleted ${MAX_DELETES_PER_RUN} stale events, ${deleteList.length - MAX_DELETES_PER_RUN} remaining for later runs.`);
+  }
 }
 
 // ── Web app (data API) ────────────────────────────────────────────────────────
