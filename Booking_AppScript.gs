@@ -20,6 +20,8 @@ function onOpen() {
     .addItem('Sync Calendar Now', 'syncAllToCalendar')
     .addSeparator()
     .addItem('Setup Auto-Sync (every 6 hours)', 'installTriggers')
+    .addSeparator()
+    .addItem('Purge Old Events (fast, needs Calendar API service)', 'purgeStaleCadaverEvents')
     .addToUi();
 }
 
@@ -215,6 +217,75 @@ function syncAllToCalendar() {
   if (deleteList.length > MAX_DELETES_PER_RUN) {
     console.log(`Deleted ${MAX_DELETES_PER_RUN} stale events, ${deleteList.length - MAX_DELETES_PER_RUN} remaining for later runs.`);
   }
+}
+
+// ── Fast backlog purge ────────────────────────────────────────────────────────
+//
+// One-off cleanup of the duplicate events left behind by the old sync bug.
+// Uses the Advanced Calendar Service, whose quota is far higher than CalendarApp's:
+//   Apps Script editor → Services → + → "Google Calendar API" → Add (identifier "Calendar").
+// Run it once from the Sutrex menu; if it can't finish in one execution it installs
+// an hourly trigger for itself and removes that trigger when the backlog is gone.
+function purgeStaleCadaverEvents() {
+  const started = Date.now();
+  const calId   = CalendarApp.getDefaultCalendar().getId();
+
+  // Everything before today is stale — those deadlines have already passed
+  const timeMin   = new Date(started - 130 * 24 * 60 * 60 * 1000).toISOString();
+  const todayISO  = Utilities.formatDate(new Date(), 'Asia/Singapore', 'yyyy-MM-dd');
+  const timeMax   = sgtDate(todayISO, 0, 0).toISOString();
+
+  let deleted = 0, outOfTime = false;
+
+  while (!outOfTime) {
+    // Re-list from the start each pass — deleted events drop out of the results
+    const resp  = Calendar.Events.list(calId, {
+      timeMin, timeMax, q: 'Cadaver Box', singleEvents: true, maxResults: 250,
+    });
+    const items = (resp.items || []).filter(ev => (ev.summary || '').includes('Cadaver Box'));
+    if (!items.length) break;
+
+    let deletedThisPass = 0;
+    for (const ev of items) {
+      if (Date.now() - started > 4.5 * 60 * 1000) { outOfTime = true; break; }
+      try {
+        Calendar.Events.remove(calId, ev.id);
+      } catch (err) {
+        Utilities.sleep(2000); // brief backoff on rate limit, then retry once
+        Calendar.Events.remove(calId, ev.id);
+      }
+      deleted++;
+      deletedThisPass++;
+      Utilities.sleep(50); // stay under the per-minute API quota
+    }
+    if (!deletedThisPass) break;
+  }
+
+  if (outOfTime) {
+    ensurePurgeTrigger_();
+  } else {
+    removePurgeTrigger_();
+  }
+
+  const msg = outOfTime
+    ? `Deleted ${deleted} old events — more remain, purge will continue hourly.`
+    : `Deleted ${deleted} old events — backlog is clear!`;
+  console.log(msg);
+  try { SpreadsheetApp.getUi().alert(msg); } catch (_) {} // no UI when run from a trigger
+}
+
+function ensurePurgeTrigger_() {
+  const exists = ScriptApp.getProjectTriggers()
+    .some(t => t.getHandlerFunction() === 'purgeStaleCadaverEvents');
+  if (!exists) {
+    ScriptApp.newTrigger('purgeStaleCadaverEvents').timeBased().everyHours(1).create();
+  }
+}
+
+function removePurgeTrigger_() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'purgeStaleCadaverEvents')
+    .forEach(t => ScriptApp.deleteTrigger(t));
 }
 
 // ── Web app (data API) ────────────────────────────────────────────────────────
