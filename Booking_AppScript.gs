@@ -19,7 +19,7 @@ function onOpen() {
     .createMenu('Sutrex')
     .addItem('Sync Calendar Now', 'syncAllToCalendar')
     .addSeparator()
-    .addItem('Setup Auto-Sync (every 30 min)', 'installTriggers')
+    .addItem('Setup Auto-Sync (every 6 hours)', 'installTriggers')
     .addToUi();
 }
 
@@ -31,10 +31,10 @@ function installTriggers() {
 
   ScriptApp.newTrigger('syncAllToCalendar')
     .timeBased()
-    .everyMinutes(30)
+    .everyHours(6)
     .create();
 
-  SpreadsheetApp.getUi().alert('Done! Calendar will auto-sync every 30 minutes.');
+  SpreadsheetApp.getUi().alert('Done! Calendar will auto-sync every 6 hours.');
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ function normalizeSheetTime(val) {
 
 // Cap deletions per run so a large backlog of stale/duplicate events clears
 // gradually without tripping Calendar's rate limits again.
-const MAX_DELETES_PER_RUN = 50;
+const MAX_DELETES_PER_RUN = 200;
 
 function syncAllToCalendar() {
   const ss  = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET);
@@ -206,8 +206,12 @@ function syncAllToCalendar() {
     if (!usedKeys.has(key)) deleteList.push(ev);
   });
 
-  // Delete a capped batch; the remainder clears on subsequent runs
-  deleteList.slice(0, MAX_DELETES_PER_RUN).forEach(ev => ev.deleteEvent());
+  // Delete a capped batch; the remainder clears on subsequent runs.
+  // Brief pause between deletes keeps us under the short-burst rate limit.
+  deleteList.slice(0, MAX_DELETES_PER_RUN).forEach(ev => {
+    ev.deleteEvent();
+    Utilities.sleep(100);
+  });
   if (deleteList.length > MAX_DELETES_PER_RUN) {
     console.log(`Deleted ${MAX_DELETES_PER_RUN} stale events, ${deleteList.length - MAX_DELETES_PER_RUN} remaining for later runs.`);
   }
