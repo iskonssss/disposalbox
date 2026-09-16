@@ -427,7 +427,7 @@
   // ── API ───────────────────────────────────────────────────────────────────
   function apiGet(action) {
     var url = SCRIPT_URL + '?action=' + action + '&token=' + encodeURIComponent(TOKEN);
-    return fetch(url, { redirect: 'follow' }).then(function (r) { return r.json(); });
+    return fetch(url, { redirect: 'follow' }).then(parseApiResponse);
   }
 
   function apiPost(action, data) {
@@ -435,7 +435,22 @@
       method: 'POST', redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ token: TOKEN, action: action, data: data }),
-    }).then(function (r) { return r.json(); });
+    }).then(parseApiResponse);
+  }
+
+  // Read the body as text and parse it ourselves. Safari's r.json() reports any
+  // non-JSON body (e.g. a Google HTML error / sign-in / "unusual traffic" page)
+  // as the unhelpful "The string did not match the expected pattern".
+  function parseApiResponse(r) {
+    return r.text().then(function (text) {
+      try { return JSON.parse(text); }
+      catch (_) {
+        var snippet = text.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ')
+                          .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+        throw new Error('Google returned an unexpected response (HTTP ' + r.status + ')' +
+                        (snippet ? ': ' + snippet : '') + ' — please try again.');
+      }
+    });
   }
 
   // ── PDF ───────────────────────────────────────────────────────────────────
