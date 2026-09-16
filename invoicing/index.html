@@ -302,7 +302,6 @@
   }
 
   // ── LOAD / RESET ──────────────────────────────────────────────────────────
-  var numberEdited = false;
 
   function setToday() {
     var now = new Date();
@@ -314,6 +313,7 @@
   function resetForm() {
     // Clear header fields
     $('number').value = '';
+    $('number').placeholder = 'Auto on save';
     setToday();
     $('customerName').value  = '';
     $('contactNumber').value = '';
@@ -322,7 +322,6 @@
     $('addressLine2').value  = '';
     $('jobHeader').value     = '';
     $('showItemLabels').checked = true;
-    numberEdited = false;
 
     // Reset items to 1 fresh item
     items = []; idSeq = 0;
@@ -363,6 +362,8 @@
         loading('btnPreview', false, 'Generate preview');
         if (res.error) { banner('errBanner', res.error); return; }
         renderPdf(res.pdfBase64);
+        // Show which number the server will assign (field stays blank = still auto)
+        if (res.invoiceNum && !val('number')) $('number').placeholder = 'Auto: ' + res.invoiceNum;
         $('btnSave').disabled = false;
         hide('saveResult');
       })
@@ -385,11 +386,9 @@
         el.innerHTML = 'Saved <b>' + res.fileName + '</b> to <b>' + res.folder +
           '</b> &nbsp;&middot;&nbsp; <a class="link" target="_blank" href="' + res.url + '">Open in Drive &rarr;</a>';
         el.classList.remove('hidden');
-        // Update cached number
-        if (res.nextNumberRaw) {
-          localStorage.setItem('gi_nextNum', res.nextNumberRaw);
-          if (!numberEdited) $('number').value = res.nextNumberRaw + 'B';
-        }
+        // Pin the number that was actually saved, so a re-save replaces this
+        // invoice instead of consuming the next number. "New invoice" clears it.
+        if (res.invoiceNum) $('number').value = res.invoiceNum;
       })
       .catch(function (err) {
         loading('btnSave', false, 'Save to Drive');

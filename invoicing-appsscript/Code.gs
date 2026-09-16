@@ -39,7 +39,12 @@ function doGet(e) {
 
   const action = params.action || '';
   try {
-    if (action === 'getNextNumber') return json({ nextNumberRaw: getNextInvoiceNumber_() });
+    if (action === 'getNextNumber') {
+      // Full Drive walk (slow, ~25s) - also resyncs the fast cache used by preview/save.
+      const n = getNextInvoiceNumber_();
+      PropertiesService.getScriptProperties().setProperty('NEXT_NUM_CACHE', String(n));
+      return json({ nextNumberRaw: n });
+    }
     return json({ error: 'Unknown action' });
   } catch (err) {
     return json({ error: err.message });
@@ -77,24 +82,36 @@ function previewDocument_(data) {
 }
 
 function saveDocument_(data) {
-  const { sheet, printRows, invoiceNum } = writeToSheet_(data);
-  const filename = buildFileName_(data, invoiceNum);
-  const blob     = exportPdf_(sheet, 'A1:I' + printRows).setName(filename);
-  const folder   = getMonthFolder_(parseDocDate_(data.dateOfIssue));
-
-  const dupes = folder.getFilesByName(filename);
-  while (dupes.hasNext()) dupes.next().setTrashed(true);
-
-  const file = folder.createFile(blob);
-
-  // Refresh cache and return next number
-  let nextNum = null;
+  // Serialise saves so two overlapping requests can never be given the same number.
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
   try {
-    nextNum = getNextInvoiceNumber_();
-    PropertiesService.getScriptProperties().setProperty('NEXT_NUM_CACHE', String(nextNum));
-  } catch (_) {}
+    const { sheet, printRows, invoiceNum, autoNumbered } = writeToSheet_(data, { authoritative: true });
+    const filename = buildFileName_(data, invoiceNum);
+    const blob     = exportPdf_(sheet, 'A1:I' + printRows).setName(filename);
+    const folder   = getMonthFolder_(parseDocDate_(data.dateOfIssue));
 
-  return { fileName: file.getName(), url: file.getUrl(), folder: folder.getName(), nextNumberRaw: nextNum };
+    const dupes = folder.getFilesByName(filename);
+    while (dupes.hasNext()) dupes.next().setTrashed(true);
+
+    const file = folder.createFile(blob);
+
+    // Advance the series past the number just used (no Drive rescan needed).
+    let nextNum = null;
+    const m = String(invoiceNum).match(NUM_RE);
+    if (m) {
+      const props  = PropertiesService.getScriptProperties();
+      const cached = parseInt(props.getProperty('NEXT_NUM_CACHE') || '0', 10);
+      const used   = parseInt(m[1], 10);
+      nextNum = autoNumbered ? used + 1 : Math.max(cached, used + 1);
+      props.setProperty('NEXT_NUM_CACHE', String(nextNum));
+    }
+
+    return { fileName: file.getName(), url: file.getUrl(), folder: folder.getName(),
+             invoiceNum, nextNumberRaw: nextNum };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ── SHEET WRITE ───────────────────────────────────────────────────────────────
@@ -113,7 +130,7 @@ function detectCurrentItemCount_(sheet) {
   return count;
 }
 
-function writeToSheet_(data) {
+function writeToSheet_(data, opts) {
   const sheet = SpreadsheetApp.openById(INVOICE_SS_ID).getSheetByName(INVOICE_TAB);
   if (!sheet) throw new Error('Tab not found: "' + INVOICE_TAB + '"');
 
@@ -151,7 +168,9 @@ function writeToSheet_(data) {
 
   // ── Auto-generate invoice number if blank ────────────────────────────────
 
-  const invoiceNum = (data.number || '').trim() || (cachedNextNumber_() + 'B');
+  const manualNum    = (data.number || '').trim();
+  const autoNumbered = !manualNum;
+  const invoiceNum   = manualNum || (nextInvoiceNumber_(!!(opts && opts.authoritative)) + 'B');
 
   // ── Write header fields ───────────────────────────────────────────────────
 
@@ -220,7 +239,7 @@ function writeToSheet_(data) {
   if (data.termsText != null) sheet.getRange('A' + termsRow).setValue(data.termsText);
 
   SpreadsheetApp.flush();
-  return { sheet, printRows, termsRow, invoiceNum };
+  return { sheet, printRows, termsRow, invoiceNum, autoNumbered };
 }
 
 // ── PDF EXPORT ────────────────────────────────────────────────────────────────
@@ -260,18 +279,57 @@ function parseDocDate_(s) {
 
 // ── NUMBER SERIES ─────────────────────────────────────────────────────────────
 
-function cachedNextNumber_() {
-  const props  = PropertiesService.getScriptProperties();
-  const cached = parseInt(props.getProperty('NEXT_NUM_CACHE') || '0', 10);
-  if (cached > 0) return cached;
-  const num = getNextInvoiceNumber_();
-  props.setProperty('NEXT_NUM_CACHE', String(num));
-  return num;
+const NUM_RE = /^(\d+)\s*B\b/i;   // "1253B Invoice - Customer.pdf" -> 1253
+
+// Fast path used by every preview and save. NEXT_NUM_CACHE is the primary sequencer;
+// Drive is consulted cheaply so invoices created outside this app (e.g. by the booking
+// app, which saves into the same folder) are never given the same number again.
+//   authoritative=true (save): also take the max from this month's and last month's folders
+//   (folder listings are consistent, whereas Drive search can lag a few seconds).
+function nextInvoiceNumber_(authoritative) {
+  const props = PropertiesService.getScriptProperties();
+  let n = parseInt(props.getProperty('NEXT_NUM_CACHE') || '0', 10);
+  if (!(n > 0)) {
+    n = getNextInvoiceNumber_();
+    props.setProperty('NEXT_NUM_CACHE', String(n));
+  }
+  if (authoritative) n = Math.max(n, recentFolderMax_() + 1);
+  while (invoiceNumberExists_(n)) n++;
+  return n;
 }
 
+function recentFolderMax_() {
+  const root = DriveApp.getFolderById(INVOICES_FOLDER_ID);
+  const now  = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  let max = 0;
+  [now, prev].forEach(function (d) {
+    const years = root.getFoldersByName(String(d.getFullYear()));
+    if (!years.hasNext()) return;
+    const months = years.next().getFoldersByName(monthFolderName_(d));
+    if (!months.hasNext()) return;
+    const files = months.next().getFiles();
+    while (files.hasNext()) {
+      const m = files.next().getName().match(NUM_RE);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+  });
+  return max;
+}
+
+// One indexed Drive query: is there already a file named "<n>B ..."?
+function invoiceNumberExists_(n) {
+  const files = DriveApp.searchFiles("title contains '" + n + "B' and trashed = false");
+  const re    = new RegExp('^' + n + '\\s*B\\b', 'i');
+  while (files.hasNext()) if (re.test(files.next().getName())) return true;
+  return false;
+}
+
+// Full walk of every year/month folder. Slow (~25s) - used only as a fallback when the
+// cache is empty and by the getNextNumber action (manual resync).
 function getNextInvoiceNumber_() {
   const root = DriveApp.getFolderById(INVOICES_FOLDER_ID);
-  const re   = /^(\d+)\s*B\b/i;
+  const re   = NUM_RE;
   let max    = 0;
 
   const years = root.getFolders();
@@ -288,11 +346,13 @@ function getNextInvoiceNumber_() {
   return max === 0 ? 1001 : max + 1;
 }
 
+function monthFolderName_(date) {
+  return (date.getMonth() + 1) + ' ' + Utilities.formatDate(date, TIMEZONE, 'MMMM');
+}
+
 function getMonthFolder_(date) {
-  const root      = DriveApp.getFolderById(INVOICES_FOLDER_ID);
-  const year      = String(date.getFullYear());
-  const monthName = (date.getMonth() + 1) + ' ' + Utilities.formatDate(date, TIMEZONE, 'MMMM');
-  return getOrCreateFolder_(getOrCreateFolder_(root, year), monthName);
+  const root = DriveApp.getFolderById(INVOICES_FOLDER_ID);
+  return getOrCreateFolder_(getOrCreateFolder_(root, String(date.getFullYear())), monthFolderName_(date));
 }
 
 function getOrCreateFolder_(parent, name) {
