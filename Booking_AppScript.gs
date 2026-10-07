@@ -247,13 +247,23 @@ function doGet(e) {
   }
 
   if (action === 'delete') {
-    const id   = e.parameter.id;
-    const rows = ss.getDataRange().getValues();
-    for (let i = 1; i < rows.length; i++) {
-      if (String(rows[i][0]) === String(id)) {
-        ss.deleteRow(i + 1);
-        break;
-      }
+    const id      = String(e.parameter.id || '');
+    const date    = String(e.parameter.date || '');
+    const batch   = String(e.parameter.batch || '');
+    const boxType = String(e.parameter.boxType || '').toLowerCase();
+    const rows    = ss.getDataRange().getValues();
+    // Cols: 0=id 1=date 2=batch 3=time 4=boxType 5=status 6=invoiced
+    // Delete EVERY matching row (not just the first) and iterate bottom-up so
+    // row indices stay valid as rows are removed. Rows with a blank/legacy id
+    // are matched on the composite key so they can finally be deleted.
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const rowId      = String(rows[i][0]);
+      const matchById  = id && rowId === id;
+      const matchByKey = (!rowId || !id) && date &&
+        toDateISO(rows[i][1]) === date &&
+        String(rows[i][2]) === batch &&
+        String(rows[i][4]).toLowerCase() === boxType;
+      if (matchById || matchByKey) ss.deleteRow(i + 1);
     }
     return json({ ok: true });
   }

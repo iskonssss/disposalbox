@@ -816,11 +816,12 @@
     try {
       const res  = await fetch(`${API}?action=get`);
       const data = await res.json();
-      cache = Array.isArray(data) ? data.map(b => ({
+      const rows = Array.isArray(data) ? data.map(b => ({
         ...b,
         date: String(b.date || '').slice(0, 10),
         time: normalizeTime(b.time),
       })) : [];
+      cache = dedupeBookings(rows);
       saveLocal(cache);
       setSyncState('ok');
     } catch (err) {
@@ -859,6 +860,19 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+  // Collapse duplicate rows (same date + batch + box type) that can exist when a
+  // booking was entered twice or an old id-less row never got deleted. Keeps the
+  // first occurrence so each batch shows once per date.
+  function dedupeBookings(rows) {
+    const seen = new Set();
+    return rows.filter(b => {
+      const key = `${b.date}|${String(b.batch).trim().toLowerCase()}|${String(b.boxType).trim().toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
 
   // Normalize time values from Google Sheets (may arrive as "1899-12-30T07:04:35.000Z" or "15:04")
   function normalizeTime(t) {
@@ -1293,7 +1307,7 @@
         </div>
       </div>
       <button class="save-btn ${color}" id="saveBtn" onclick="saveBooking()">Save</button>
-      ${prefill ? `<button class="delete-btn" onclick="deleteBooking('${prefill.id}')">Delete</button>` : ''}
+      ${prefill ? `<button class="delete-btn" onclick='deleteBooking(${JSON.stringify(prefill.id || "")}, ${JSON.stringify({date: prefill.date, batch: prefill.batch, boxType: prefill.boxType})})'>Delete</button>` : ''}
     </div>`;
   }
 
@@ -1351,10 +1365,16 @@
     bgSync(`action=${action}&data=${encodeURIComponent(JSON.stringify(booking))}`);
   }
 
-  function deleteBooking(id) {
+  function deleteBooking(id, key) {
     if (!confirm('Delete this booking?')) return;
 
-    cache = cache.filter(b => b.id !== id);
+    // Remove from local cache. Match by id when present; otherwise (legacy/blank-id
+    // or duplicate rows) fall back to the composite key so stale twins also go.
+    cache = cache.filter(b => {
+      if (id && b.id) return b.id !== id;
+      if (key) return !(b.date === key.date && b.batch === key.batch && b.boxType === key.boxType);
+      return b.id !== id;
+    });
     saveLocal(cache);
 
     closeSheet();
@@ -1362,7 +1382,13 @@
     renderList();
     showToast('Deleted');
 
-    bgSync(`action=delete&id=${encodeURIComponent(id)}`);
+    let qs = `action=delete&id=${encodeURIComponent(id || '')}`;
+    if (key) {
+      qs += `&date=${encodeURIComponent(key.date)}` +
+            `&batch=${encodeURIComponent(key.batch)}` +
+            `&boxType=${encodeURIComponent(key.boxType)}`;
+    }
+    bgSync(qs);
   }
 
   // ── Sheet ─────────────────────────────────────────────────────────────────────
