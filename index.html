@@ -689,6 +689,7 @@
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <button onclick="openPinModal()" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;cursor:pointer" id="invBtn">Invoice</button>
+    <button onclick="copyDateList()" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;cursor:pointer" id="copyBtn" title="Copy upcoming dates for WhatsApp">Copy</button>
     <a href="inventory.html" style="background:rgba(255,255,255,0.12);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:white;text-decoration:none">Materials</a>
     <button class="refresh-btn" onclick="manualRefresh()" title="Refresh">↻</button>
     <div class="sync-dot syncing" id="syncDot" title="Syncing..."></div>
@@ -1511,6 +1512,45 @@
       dot.classList.toggle('filled', i < _pin.length);
       dot.classList.remove('error');
     }
+  }
+
+  // ── Copy upcoming dates (WhatsApp list) ───────────────────────────────────────
+  // Every booking from today onwards, all statuses (incl. pending) and both box types.
+  // Same date booked more than once -> "xN". Dates outside the current month get the year.
+  function buildDateList() {
+    const todayI = todayISO();
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const counts = {};
+    cache.filter(b => b.date >= todayI).forEach(b => { counts[b.date] = (counts[b.date] || 0) + 1; });
+
+    const lines = Object.keys(counts).sort().map(iso => {
+      const [y, m, d] = iso.split('-').map(Number);
+      const sameMonth = iso.slice(0, 7) === todayI.slice(0, 7);
+      let s = d + ' ' + MONTHS[m - 1];
+      if (iso === todayI) s += '(today)';
+      if (!sameMonth)     s += ' ' + y;
+      if (counts[iso] > 1) s += ' x' + counts[iso];
+      return '•  ' + s;
+    });
+    return { count: lines.length, text: ['Updated new date list', ...lines].join('\n') };
+  }
+
+  async function copyDateList() {
+    const { count, text } = buildDateList();
+    if (!count) { showToast('No upcoming bookings'); return; }
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (_) {}
+    if (!ok) {
+      // Fallback for browsers without async clipboard (older iOS / non-secure contexts)
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+      try { ok = document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+    }
+    showToast(ok ? `Copied ${count} date${count === 1 ? '' : 's'}` : 'Copy failed');
   }
 
   async function triggerInvoice() {
